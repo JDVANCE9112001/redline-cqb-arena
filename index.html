@@ -1782,9 +1782,9 @@ async function loadGameAssets() {
   }
   try {
     assets.rifleObject = await new OBJLoader().loadAsync('assets/models/AssaultRifle2_2.obj');
-    const colors = { Main: 0x303b44, MainDark: 0x121a22, MainLight: 0x687985 };
+    const colors = { Main: 0x17242e, MainDark: 0x0a1119, MainLight: 0x354a55 };
     const materials = Object.fromEntries(Object.entries(colors).map(([name, color]) => [name,
-      new THREE.MeshStandardMaterial({ color, metalness: .48, roughness: .38, flatShading: true })
+      new THREE.MeshStandardMaterial({ color, metalness: .12, roughness: .78, flatShading: true })
     ]));
     assets.rifleObject.traverse(obj => {
       if (!obj.isMesh) return;
@@ -2557,11 +2557,11 @@ class Enemy {
     const glow = this.handGlow;
     if (oldGun?.parent) oldGun.parent.remove(oldGun);
     const gun = new THREE.Group();
-    gun.position.set(0, -.03, .02);
+    gun.position.set(.12, .31, .31);
     if (GAME_ASSETS.rifleObject) {
       const rifle = GAME_ASSETS.rifleObject.clone(true);
       rifle.scale.setScalar(.22);
-      rifle.rotation.y = -Math.PI / 2;
+      rifle.rotation.y = -Math.PI / 2 + .27;
       rifle.position.set(0, -.015, .025);
       gun.add(rifle);
     } else {
@@ -2575,11 +2575,11 @@ class Enemy {
       gun.add(body, barrel, stock, magazine);
     }
     this.gunMuzzle = new THREE.Object3D();
-    this.gunMuzzle.position.set(0, .04, GAME_ASSETS.rifleObject ? .76 : .52);
+    this.gunMuzzle.position.set(.16, .04, GAME_ASSETS.rifleObject ? 1.01 : .76);
     gun.add(this.gunMuzzle);
     this.gunMuzzle.add(glow);
     glow.position.set(0, 0, 0);
-    this.arms[1].hand.add(gun);
+    this.body.add(gun);
     this.gun = gun;
 
     if (eliteFaceMatHealthy) {
@@ -2951,8 +2951,10 @@ class Enemy {
     la.hand.rotation.z = .08 + stride * .045 * this.walk;
     ra.hand.rotation.z = -.08 - .15 * attack;
 
-    this.gun.rotation.x = -(ra.shoulder.rotation.x + ra.elbow.rotation.x) - .02;
-    this.gun.rotation.z = -(ra.hand.rotation.z + ra.shoulder.rotation.z) + .04;
+    if (!this.elite) {
+      this.gun.rotation.x = -(ra.shoulder.rotation.x + ra.elbow.rotation.x) - .02;
+      this.gun.rotation.z = -(ra.hand.rotation.z + ra.shoulder.rotation.z) + .04;
+    }
 
     this.body.position.y = this.bodyBaseY - crouch * .10 + Math.abs(Math.sin(this.phase * 2)) * .018 * this.walk + Math.sin(this.phase * 2) * .004;
     this.body.rotation.z = Math.sin(this.phase) * .022 * this.walk + .012 * idle;
