@@ -574,6 +574,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -1703,7 +1704,35 @@ function buildWeapon() {
   camera.add(light);
   playerLight = light;
 
-  if (GAME_ASSETS.pistolFrame.length) {
+  if (GAME_ASSETS.pistolObject) {
+    // Quaternius Pistol_2: a compact dark sidearm, aligned with the existing muzzle and recoil rig.
+    gun.traverse(o => { if (o.isMesh) o.visible = false; });
+    const asset = GAME_ASSETS.pistolObject;
+    asset.scale.setScalar(.35);
+    asset.rotation.y = Math.PI / 2;
+    asset.position.set(0, -.13, .245);
+    asset.traverse(o => {
+      if (!o.isMesh) return;
+      const shade = {
+        Black: 0x0e1419, LightMetal: 0x869097,
+        Metal: 0x39454c, Wood: 0x533b32
+      };
+      const materialFor = original => {
+        const name = original?.name || 'Metal';
+        return new THREE.MeshStandardMaterial({
+          color: shade[name] || shade.Metal,
+          metalness: name === 'Wood' ? .03 : .65,
+          roughness: name === 'Wood' ? .72 : .33,
+          flatShading: true
+        });
+      };
+      o.material = Array.isArray(o.material) ? o.material.map(materialFor) : materialFor(o.material);
+    });
+    gun.add(asset);
+    flashGroup.traverse(o => { if (o.isMesh) o.visible = true; });
+    muzzleAnchor.position.set(0, .06, -.272);
+    flashGroup.position.set(0, .06, -.283);
+  } else if (GAME_ASSETS.pistolFrame.length) {
     // Replace the procedural viewmodel with the Blender-built black glass pistol.
     const gunVisualMat = gunBlack.clone();
     gunVisualMat.flatShading = true;
@@ -1735,7 +1764,7 @@ function buildWeapon() {
 }
 
 async function loadGameAssets() {
-  const assets = { enemyGeos: {}, pistolFrame: [], pistolSlide: [] };
+  const assets = { enemyGeos: {}, pistolFrame: [], pistolSlide: [], pistolObject: null };
   const loader = new GLTFLoader();
   try {
     const gltf = await loader.loadAsync('assets/models/enemy_parts.glb');
@@ -1745,6 +1774,12 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] enemy GLB unavailable; using procedural fallback.', error);
   }
   try {
+    assets.pistolObject = await new OBJLoader().loadAsync('assets/models/Pistol_2.obj');
+  } catch (error) {
+    console.warn('[RED SHIFT] Quaternius pistol unavailable; loading original sidearm.', error);
+  }
+  try {
+    if (!assets.pistolObject) {
     const gltf = await loader.loadAsync('assets/models/pistol_parts.glb');
     gltf.scene.updateMatrixWorld(true);
     gltf.scene.traverse(o => {
@@ -1752,6 +1787,7 @@ async function loadGameAssets() {
       if (o.name.startsWith('slide_')) assets.pistolSlide.push(o.geometry);
       else assets.pistolFrame.push(o.geometry);
     });
+    }
   } catch (error) {
     console.warn('[RED SHIFT] pistol GLB unavailable; using procedural fallback.', error);
   }
