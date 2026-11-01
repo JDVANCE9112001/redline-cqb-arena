@@ -1845,12 +1845,12 @@ function buildShotgun() {
   const rig = new THREE.Group();
   camera.add(rig);
   const gun = new THREE.Group();
-  gun.position.set(.31, -.30, -.71);
-  gun.rotation.set(-.035, .23, .015);
+  gun.position.set(.27, -.29, -.88);
+  gun.rotation.set(-.025, 0, .008);
   rig.add(gun);
   if (GAME_ASSETS.shotgunObject) {
     const model = GAME_ASSETS.shotgunObject.clone(true);
-    model.scale.setScalar(.19);
+    model.scale.setScalar(.17);
     model.rotation.y = Math.PI / 2;
     gun.add(model);
   } else {
@@ -1863,7 +1863,7 @@ function buildShotgun() {
     gun.add(barrel, stock);
   }
   const muzzleAnchor = new THREE.Object3D();
-  muzzleAnchor.position.set(0, .015, -.82);
+  muzzleAnchor.position.set(0, .015, -.75);
   gun.add(muzzleAnchor);
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd5a6, transparent: true, opacity: .95, depthWrite: false, side: THREE.DoubleSide });
   const flashGroup = new THREE.Mesh(new THREE.PlaneGeometry(.24, .24), flashMat);
@@ -3849,6 +3849,16 @@ function buildWarehouseRoom() {
     addRoomBox(room, M.pale, w, h, d, x, h / 2, z, { solid: true, cast: true });
     addRoomBox(room, M.chrome, w + .06, .045, d + .06, x, h + .022, z, { solid: false, ignoreRay: true });
     addRoomBox(room, M.cyanSoft, w * .62, .02, .025, x, h + .055, z - d / 2 - .02, { solid: false, ignoreRay: true });
+  }
+
+  // Four head-height shields give the player safe routes across the exposed cross lanes.
+  // Their footprints leave over 1.5 m between the cargo crate and the nearest shield.
+  for (const [x, z] of [[-4.5, 4.0], [4.5, 4.0], [-4.5, -5.0], [4.5, -5.0]]) {
+    const w = 1.55, h = 1.92, d = 1.0;
+    addRoomBox(room, M.porcelain, w, h, d, x, h / 2, z, { solid: true, cast: true });
+    addRoomBox(room, M.chrome, w + .06, .05, d + .06, x, h + .025, z, { solid: false, ignoreRay: true });
+    addRoomBox(room, M.bluePanel, w * .73, .56, .035, x, 1.13, z + d / 2 + .023, { solid: false, ignoreRay: true });
+    addRoomBox(room, M.cyanSoft, w * .63, .022, .025, x, h + .062, z, { solid: false, ignoreRay: true });
   }
 
   // A single solid cargo crate anchors the open middle without closing either flank.
