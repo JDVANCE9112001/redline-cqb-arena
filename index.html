@@ -537,7 +537,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <div class="load-mark"><span class="glyph"></span><h2>RED SHIFT</h2></div>
     <div class="load-track"><i></i></div>
     <div class="load-label">INITIALIZING MIRAXIS ATRIUM / Y2K BUILD</div>
-    <div id="load-error">无法初始化场景。<br>请确认当前浏览器支持 WebGL，并且可以访问 Three.js CDN。</div>
+    <div id="load-error">无法初始化场景。<br>请确认当前浏览器支持 WebGL，然后刷新页面重试。</div>
   </div>
   <div class="load-corner">SIGNAL / 01</div>
   <div class="load-corner right">TIME DILATION PROTOCOL</div>
@@ -596,6 +596,8 @@ try {
   throw error;
 }
 const pixelRatio = Math.min(devicePixelRatio || 1, 1.1);
+let renderPixelRatio = pixelRatio;
+let slowFrameTotal = 0, slowFrameCount = 0;
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -6318,6 +6320,16 @@ function animate() {
   const now = performance.now();
   const dt = Math.min((now - lastFrame) / 1000, .05);
   lastFrame = now;
+  if (gameState === 'playing' && dt > 0 && !document.hidden) {
+    slowFrameTotal += dt; slowFrameCount++;
+    if (slowFrameCount >= 90) {
+      if (slowFrameTotal / slowFrameCount > .033 && renderPixelRatio > .7) {
+        renderPixelRatio = Math.max(.7, renderPixelRatio - .2);
+        renderer.setPixelRatio(renderPixelRatio); renderer.setSize(innerWidth, innerHeight, false);
+      }
+      slowFrameTotal = 0; slowFrameCount = 0;
+    }
+  }
 
   // menu animation: keep the room alive, but never let enemies advance
   if (gameState === 'menu' || gameState === 'paused' || gameState === 'dead' || gameState === 'won') {
@@ -6405,7 +6417,7 @@ setupPost();
 function onResize() {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.1));
+  renderer.setPixelRatio(renderPixelRatio);
   renderer.setSize(innerWidth, innerHeight);
   if (composerState.composer) {
     composerState.composer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.1));
