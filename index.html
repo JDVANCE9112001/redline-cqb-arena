@@ -428,7 +428,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
   </div>
 
   <div class="weapon-readout" id="weapon-readout">
-    <div class="weapon-top"><span>SIDEARM / ∞</span><b id="weapon-top-label">READY</b></div>
+    <div class="weapon-top"><span>ARMORY / ∞</span><b id="weapon-top-label">READY</b></div>
     <div class="weapon-main"><i aria-hidden="true"></i><span id="weapon-state">手枪 · 弹药 ∞</span></div>
     <div class="weapon-hint" id="weapon-hint">Q / 右键 投掷 · 击中可击杀</div>
   </div>
@@ -436,7 +436,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
   <div class="controls">
     <div>
       <div class="key-row"><span>移动</span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
-      <div class="key-row"><span>射击</span><kbd>LMB</kbd><span>·</span><span>投掷</span><kbd>Q</kbd><span>/</span><kbd>RMB</kbd></div>
+      <div class="key-row"><span>射击</span><kbd>LMB</kbd><span>·</span><span>投掷</span><kbd>Q</kbd><span>/</span><kbd>RMB</kbd><span>·</span><span>切枪</span><kbd>1</kbd><kbd>2</kbd></div>
       <div class="key-row"><span>释放</span><kbd>ESC</kbd><span>·</span><span>重开</span><kbd>R</kbd><span>·</span><span>静音</span><kbd>M</kbd></div>
     </div>
     <button class="audio-chip" id="audio-btn" type="button" title="切换声音 (M)"><i class="audio-dot"></i><span id="audio-label">AUDIO ON</span></button>
@@ -463,7 +463,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <div class="kicker">TIME BENDS AROUND YOU</div>
     <h1><span class="red">RED</span><span class="shift">SHIFT</span></h1>
     <div class="intro-jp">ミ ラ ク シ ス</div>
-    <p class="intro-copy">在同一张战斗地图中迎击一波又一波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，开火、投掷和转动视角都不会</b>。带头像贴纸的步枪精英需要命中两次。清空一波后有短暂间歇，下一波会更危险。阵亡后结算击杀与存活波次。</p>
+    <p class="intro-copy">在同一张战斗地图中迎击 8 波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，开火、投掷和转动视角都不会</b>。带头像贴纸的步枪精英需要命中两次；累计击杀 3 名精英可解锁 12 弹丸散弹枪，按 1 / 2 切换武器。清空一波后有短暂间歇，下一波会更危险。阵亡后结算击杀与存活波次。</p>
     <div class="intro-actions">
       <button class="enter-btn" id="enter-btn" type="button"><span>进入模拟</span><span>ENTER SIMULATION</span><span class="arrow">↗</span></button>
       <div class="enter-note"><b>点击画面锁定鼠标</b>CLICK ANYWHERE TO ENGAGE</div>
@@ -472,7 +472,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
       <span><kbd>WASD</kbd>移动</span>
       <span><kbd>MOUSE</kbd>瞄准</span>
       <span><kbd>LMB</kbd>射击</span>
-      <span><kbd>Q / RMB</kbd>投掷手枪</span>
+      <span><kbd>Q / RMB</kbd>投掷手枪</span><span><kbd>1 / 2</kbd>切换武器</span>
       <span><kbd>ESC</kbd>暂停</span>
     </div>
   </div>
@@ -489,7 +489,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <p>鼠标已释放，生存挑战已暂停。<br>点击继续，重新进入控制状态。</p>
     <button class="resume-btn" id="resume-btn" type="button">继续模拟 <span>RESUME ↗</span></button>
     <button class="resume-btn alt" id="pause-restart-btn" type="button">重新开始整局 <span>RESTART RUN</span></button>
-    <div class="pause-hint"><span>ESC / RELEASE POINTER</span><span>R · RESTART RUN &nbsp;&nbsp; M · SOUND</span></div>
+    <div class="pause-hint"><span>ESC / RELEASE POINTER</span><span>R · RESTART RUN &nbsp;&nbsp; M · SOUND &nbsp;&nbsp; 1 / 2 · WEAPON</span></div>
   </div>
 </section>
 
@@ -618,6 +618,10 @@ scene.add(camera);
 
 const composerState = { composer: null, bloom: null };
 let weapons = null;
+let shotgunView = null;
+let shotgunUnlocked = false;
+let eliteKills = 0;
+let currentWeapon = 'pistol';
 let playerLight = null;
 
 /* --------------------------------------------------------------------------
@@ -1766,7 +1770,7 @@ function buildWeapon() {
 }
 
 async function loadGameAssets() {
-  const assets = { enemyGeos: {}, pistolFrame: [], pistolSlide: [], pistolObject: null, rifleObject: null, enemyFace: null };
+  const assets = { enemyGeos: {}, pistolFrame: [], pistolSlide: [], pistolObject: null, rifleObject: null, shotgunObject: null, enemyFace: null };
   const loader = new GLTFLoader();
   try {
     const gltf = await loader.loadAsync('assets/models/enemy_parts.glb');
@@ -1797,6 +1801,22 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Elite rifle unavailable; using simplified rifle.', error);
   }
   try {
+    assets.shotgunObject = await new OBJLoader().loadAsync('assets/models/Shotgun_2.obj');
+    const shades = { Black: 0x0b1118, DarkMetal: 0x1c2932, DarkWood: 0x49342d, Metal: 0x667985, Wood: 0x684439 };
+    const mats = Object.fromEntries(Object.entries(shades).map(([name, color]) => [name,
+      new THREE.MeshStandardMaterial({ color, metalness: name.includes('Metal') ? .45 : .1, roughness: .63, flatShading: true })
+    ]));
+    assets.shotgunObject.traverse(obj => {
+      if (!obj.isMesh) return;
+      const assign = mat => mats[mat?.name] || mats.DarkMetal;
+      obj.material = Array.isArray(obj.material) ? obj.material.map(assign) : assign(obj.material);
+      obj.castShadow = false;
+      obj.receiveShadow = false;
+    });
+  } catch (error) {
+    console.warn('[RED SHIFT] Shotgun model unavailable; using simplified shotgun.', error);
+  }
+  try {
     assets.enemyFace = await new THREE.TextureLoader().loadAsync('assets/enemy-face.png');
     assets.enemyFace.colorSpace = THREE.SRGBColorSpace;
     assets.enemyFace.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
@@ -1820,6 +1840,41 @@ async function loadGameAssets() {
 }
 const GAME_ASSETS = await loadGameAssets();
 buildWeapon();
+
+function buildShotgun() {
+  const rig = new THREE.Group();
+  camera.add(rig);
+  const gun = new THREE.Group();
+  gun.position.set(.31, -.30, -.71);
+  gun.rotation.set(-.035, .23, .015);
+  rig.add(gun);
+  if (GAME_ASSETS.shotgunObject) {
+    const model = GAME_ASSETS.shotgunObject.clone(true);
+    model.scale.setScalar(.19);
+    model.rotation.y = Math.PI / 2;
+    gun.add(model);
+  } else {
+    const dark = new THREE.MeshStandardMaterial({ color: 0x17212a, metalness: .35, roughness: .58 });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x54362b, roughness: .85 });
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(.09, .08, .75), dark);
+    barrel.position.z = -.37;
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(.14, .16, .38), wood);
+    stock.position.set(0, -.065, .19);
+    gun.add(barrel, stock);
+  }
+  const muzzleAnchor = new THREE.Object3D();
+  muzzleAnchor.position.set(0, .015, -.82);
+  gun.add(muzzleAnchor);
+  const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd5a6, transparent: true, opacity: .95, depthWrite: false, side: THREE.DoubleSide });
+  const flashGroup = new THREE.Mesh(new THREE.PlaneGeometry(.24, .24), flashMat);
+  flashGroup.position.copy(muzzleAnchor.position);
+  flashGroup.visible = false;
+  gun.add(flashGroup);
+  rig.traverse(obj => { if (obj.isMesh) { obj.castShadow = false; obj.receiveShadow = false; obj.frustumCulled = false; } });
+  shotgunView = { rig, gun, muzzleAnchor, flashGroup, flashMat, base: gun.position.clone(), baseRot: gun.rotation.clone(), recoil: 0, flashTimer: 0, bob: 0 };
+  rig.visible = false;
+}
+buildShotgun();
 
 /* --------------------------------------------------------------------------
    Particle / transient effects
@@ -3250,6 +3305,16 @@ function defeatEnemy(enemy, hitPoint, normal = null) {
   enemy.group.visible = false;
   if (enemy.group.parent) enemy.group.parent.remove(enemy.group);
   kills++;
+  if (enemy.elite) {
+    eliteKills++;
+    if (!shotgunUnlocked && eliteKills >= 3) {
+      shotgunUnlocked = true;
+      selectWeapon('shotgun');
+      sound.pickup();
+      toast('散弹枪已解锁 · 12 弹丸圆盘散射 · 1 / 2 切换武器', 3200);
+    }
+  }
+  if (!shotgunUnlocked) setWeaponHud();
   sound.killFeedback();
   for (const other of activeEnemies) {
     if (other === enemy || !other.alive) continue;
@@ -3408,7 +3473,8 @@ const campaign = {
   levelSpawned: 0,
   firstLevelFromStart: true
 };
-const LEVEL_COUNTS = [null, [1, 3], [2, 4], [3, 5], [4, 6], [5, 7]];
+const MAX_WAVES = 8;
+const LEVEL_COUNTS = [null, [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 8], [8, 8]];
 // Stage 3 enemy tuning. 7A: burst gap 1.0 s -> 0.6 s, 2-3 rounds at .12 s.
 const ENEMY_LEVELS = [
   null,
@@ -4375,7 +4441,6 @@ function clearLevelEntities() {
   clearThrownPistol();
   pistolArmed = true;
   if (weapons) {
-    weapons.rig.visible = true;
     weapons.recoil = 0;
     weapons.slideKick = 0;
     weapons.gun.position.copy(weapons.base);
@@ -4384,6 +4449,14 @@ function clearLevelEntities() {
     weapons.flashTimer = 0;
     weapons.flashGroup.visible = false;
   }
+  if (shotgunView) {
+    shotgunView.recoil = 0;
+    shotgunView.flashTimer = 0;
+    shotgunView.flashGroup.visible = false;
+    shotgunView.gun.position.copy(shotgunView.base);
+    shotgunView.gun.rotation.copy(shotgunView.baseRot);
+  }
+  updateWeaponVisibility();
   setWeaponHud('armed');
   clearObjectives();
   totalEnemies = 0;
@@ -4426,8 +4499,8 @@ function startCombat(wave) {
   clearLevelEntities();
   waveCountdown = 0;
   campaign.level = wave;
-  const range = LEVEL_COUNTS[Math.min(wave, 5)] || [5, 7];
-  const count = Math.min(8, randInt(range[0], range[1]) + Math.max(0, wave - 5));
+  const range = LEVEL_COUNTS[Math.min(wave, MAX_WAVES)];
+  const count = randInt(range[0], range[1]);
   const eliteCount = spawnEnemies(count);
   campaign.levelSpawned = totalEnemies;
   campaign.totalSpawned += totalEnemies;
@@ -4472,6 +4545,11 @@ function startCampaign() {
   clearLevelEntities();
   campaign.phase = 'SURVIVAL_READY';
   campaign.level = 1;
+  eliteKills = 0;
+  shotgunUnlocked = false;
+  currentWeapon = 'pistol';
+  updateWeaponVisibility();
+  setWeaponHud();
   campaign.completedWaves = 0;
   campaign.roomTitle = 'WAREHOUSE';
   campaign.retries = 0;
@@ -4635,14 +4713,34 @@ function updateEnemyHud() {
   }
 }
 
+function updateWeaponVisibility() {
+  if (weapons) weapons.rig.visible = currentWeapon === 'pistol' && pistolArmed;
+  if (shotgunView) shotgunView.rig.visible = currentWeapon === 'shotgun' && shotgunUnlocked;
+}
+
+function selectWeapon(kind) {
+  if (kind === 'shotgun' && !shotgunUnlocked) return false;
+  if (kind === 'pistol' && !pistolArmed) return false;
+  currentWeapon = kind;
+  updateWeaponVisibility();
+  setWeaponHud();
+  return true;
+}
+
 function setWeaponHud(mode = 'armed') {
   if (!ui.weaponReadout) return;
   const ready = mode === 'armed';
-  ui.weaponReadout.classList.toggle('throw', !ready);
+  ui.weaponReadout.classList.toggle('throw', !ready && currentWeapon === 'pistol');
+  if (currentWeapon === 'shotgun' && shotgunUnlocked) {
+    ui.weaponTopLabel.textContent = '12 PELLETS';
+    ui.weaponState.textContent = '散弹枪 · 弹药 ∞';
+    ui.weaponHint.textContent = '圆盘散射 · 1 切手枪 / 2 切散弹枪';
+    return;
+  }
   if (ready) {
     ui.weaponTopLabel.textContent = 'READY';
     ui.weaponState.textContent = '手枪 · 弹药 ∞';
-    ui.weaponHint.textContent = 'Q / 右键 投掷 · 弹药无限';
+    ui.weaponHint.textContent = shotgunUnlocked ? 'Q / 右键 投掷 · 2 切散弹枪' : `击杀精英解锁散弹枪 ${eliteKills} / 3 · Q 投掷`;
   } else if (mode === 'flying') {
     ui.weaponTopLabel.textContent = 'AIRBORNE';
     ui.weaponState.textContent = '手枪 · 已投掷';
@@ -4762,7 +4860,7 @@ function restartWorld() {
   effects.length = 0;
   clearThrownPistol();
   pistolArmed = true;
-  weapons.rig.visible = true;
+  updateWeaponVisibility();
   setWeaponHud('armed');
   lastShotSim = -999;
 
@@ -4802,9 +4900,11 @@ function restartWorld() {
 }
 
 function fillResult(won) {
-  ui.endCode.textContent = 'SURVIVAL RUN / SIGNAL LOST';
-  ui.endTitle.innerHTML = 'SIGNAL LOST<small>生存挑战结束</small>';
-  ui.endCopy.textContent = `你在第 ${campaign.level} 波阵亡。红色信号仍在逼近，重新进入可挑战更远的波次。`;
+  ui.endCode.textContent = won ? 'SURVIVAL RUN / ALL WAVES CLEAR' : 'SURVIVAL RUN / SIGNAL LOST';
+  ui.endTitle.innerHTML = won ? 'ALL CLEAR<small>8 波挑战完成</small>' : 'SIGNAL LOST<small>生存挑战结束</small>';
+  ui.endCopy.textContent = won
+    ? `你清空了全部 ${MAX_WAVES} 波敌人，共击杀 ${kills} 名目标，其中 ${eliteKills} 名精英。`
+    : `你在第 ${campaign.level} 波阵亡。红色信号仍在逼近，重新进入可挑战更远的波次。`;
   ui.statKills.textContent = String(kills);
   ui.statAcc.textContent = String(campaign.completedWaves);
   ui.statTime.textContent = `${String(Math.floor(runElapsed / 60)).padStart(2, '0')}:${String(Math.floor(runElapsed % 60)).padStart(2, '0')}`;
@@ -4861,6 +4961,12 @@ function onAllEnemiesDown() {
   if (campaign.phase !== 'WAVE_COMBAT') return;
   if (activeEnemies.some(e => e.alive)) return;
   campaign.completedWaves = campaign.level;
+  if (campaign.level >= MAX_WAVES) {
+    campaign.phase = 'VICTORY';
+    sound.won();
+    finishRun(true);
+    return;
+  }
   campaign.phase = 'WAVE_BREAK';
   waveCountdown = 3.5;
   setHudObjective(campaign.level, '本波清除', 'CLEAR', `下一波将在 ${Math.ceil(waveCountdown)} 秒后抵达`);
@@ -4959,6 +5065,13 @@ const sound = {
     g.gain.exponentialRampToValueAtTime(.0001, now + duration);
     o.connect(g); g.connect(this.master);
     o.start(now); o.stop(now + duration + .01);
+  },
+  shotgunShot() {
+    if (!this.active()) return;
+    this.playSample('gunshot', .92, .72);
+    this.noiseBurst(680, .20, .21, 'lowpass');
+    this.noiseBurst(2600, .075, .05, 'highpass');
+    this.tone(110, 38, .25, 'triangle', .07);
   },
   pistolShot() {
     if (!this.active()) return;
@@ -5788,6 +5901,7 @@ function applyShotSpread(dir, degrees) {
 
 function shoot() {
   if (gameState !== 'playing' || !isLocked) return;
+  if (currentWeapon === 'shotgun') { fireShotgun(); return; }
   const now = performance.now();
   if (!pistolArmed) {
     if (now - lastDryAt > 280) { lastDryAt = now; sound.dryFire(); }
@@ -5842,6 +5956,57 @@ function shoot() {
   setTimeout(() => { ui.crosshair.style.transform = 'translate(-50%,-50%) scale(1)'; }, 80);
 }
 
+function fireShotgun() {
+  if (!shotgunUnlocked || !shotgunView) return;
+  if (runElapsed - lastShotSim < .55) return;
+  shots++;
+  sound.shotgunShot();
+  alertEnemies(camera.position);
+  shotgunView.recoil = 1;
+  shotgunView.flashTimer = .09;
+  shotgunView.flashGroup.visible = true;
+  camera.updateMatrixWorld(true);
+  scene.updateMatrixWorld(true);
+  raycaster.setFromCamera(center2D, camera);
+  const enemyMeshes = [];
+  activeEnemies.forEach(e => { if (e.alive) enemyMeshes.push(...e.hitParts); });
+  const projectileMeshes = enemyProjectiles.map(p => p.mesh);
+  const hitsList = raycaster.intersectObjects([...enemyMeshes, ...projectileMeshes, ...activeObjectiveMeshes(), ROOMS.current ? ROOMS.current.group : world], true);
+  let aimHit = null;
+  for (const h of hitsList) {
+    const obj = h.object;
+    if (!obj.isMesh || obj.userData.ignoreRay) continue;
+    if (obj.material && obj.material.transparent && obj.material.opacity < .55) continue;
+    aimHit = h;
+    break;
+  }
+  const muzzle = new THREE.Vector3();
+  shotgunView.muzzleAnchor.getWorldPosition(muzzle);
+  const aimPoint = aimHit ? aimHit.point.clone() : raycaster.ray.at(80, new THREE.Vector3());
+  const forward = aimPoint.sub(muzzle).normalize();
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+  const spin = Math.random() * Math.PI * 2;
+  const spread = Math.tan(THREE.MathUtils.degToRad(6.5));
+  for (let i = 0; i < 12; i++) {
+    const radius = Math.sqrt((i + .5) / 12) * spread;
+    const angle = spin + i * 2.399963229728653;
+    const direction = forward.clone()
+      .addScaledVector(right, Math.cos(angle) * radius)
+      .addScaledVector(up, Math.sin(angle) * radius)
+      .normalize();
+    spawnPlayerBullet(muzzle, direction, .65);
+  }
+  lastShotSim = runElapsed;
+  shotStreak = 0;
+  playerSpreadDeg = 6.5;
+  recoilPitch = Math.min(.18, recoilPitch + .065);
+  recoilYaw += rand(-.016, .016);
+  recoilHold = .16;
+  ui.crosshair.style.transform = 'translate(-50%,-50%) scale(1.34)';
+  setTimeout(() => { ui.crosshair.style.transform = 'translate(-50%,-50%) scale(1)'; }, 120);
+}
+
 const bulletSweepRay = new THREE.Raycaster();
 bulletSweepRay.camera = camera;
 
@@ -5856,8 +6021,8 @@ function spawnTestEnemyShot(from, to) {
   enemyProjectiles.push({ mesh: bullet.core, group: bullet.group, velocity: dir.multiplyScalar(24), life: 6.5 });
 }
 
-function spawnPlayerBullet(start, dir) {
-  const visual = createBulletVisual(playerTracerMat, playerBulletGlowMat, 1, playerTracerAuraMat);
+function spawnPlayerBullet(start, dir, size = 1) {
+  const visual = createBulletVisual(playerTracerMat, playerBulletGlowMat, size, playerTracerAuraMat);
   visual.group.position.copy(start).addScaledVector(dir, .04);
   visual.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
   scene.add(visual.group);
@@ -6004,7 +6169,7 @@ function throwPistol() {
   if (gameState !== 'playing' || !isLocked || !pistolArmed || !weapons) return;
   pistolArmed = false;
   throws++;
-  weapons.rig.visible = false;
+  updateWeaponVisibility();
   weapons.flashGroup.visible = false;
   const root = new THREE.Group();
   root.name = 'THROWN_PISTOL';
@@ -6077,7 +6242,7 @@ function pickupThrownPistol() {
   if (!thrownPistol || thrownPistol.state !== 'dropped') return;
   clearThrownPistol();
   pistolArmed = true;
-  weapons.rig.visible = true;
+  updateWeaponVisibility();
   setWeaponHud('armed');
   sound.pickup();
   toast('手枪已拾取', 900);
@@ -6251,7 +6416,11 @@ addEventListener('keydown', e => {
       beginRunWithLock();
     }
   }
-  if (e.code === 'KeyQ' && gameState === 'playing' && isLocked) {
+  if (gameState === 'playing' && isLocked && !e.repeat) {
+    if (e.code === 'Digit1') selectWeapon('pistol');
+    if (e.code === 'Digit2') selectWeapon('shotgun');
+  }
+  if (e.code === 'KeyQ' && gameState === 'playing' && isLocked && currentWeapon === 'pistol') {
     throwPistol();
   }
   if (e.code === 'Escape' && gameState === 'playing') {
@@ -6278,7 +6447,7 @@ document.addEventListener('mousemove', e => {
 document.addEventListener('mousedown', e => {
   if (gameState !== 'playing' || !isLocked) return;
   if (e.button === 0) shoot();
-  else if (e.button === 2) {
+  else if (e.button === 2 && currentWeapon === 'pistol') {
     e.preventDefault();
     throwPistol();
   }
@@ -6496,6 +6665,18 @@ function updateWeapon(dt) {
   w.gun.rotation.x = w.baseRot.x + w.recoil * .24 + swayY * .9;
   w.gun.rotation.y = w.baseRot.y + swayX * 2.5;
   w.gun.rotation.z = w.baseRot.z - swayX * .8 + Math.sin(w.bob * .5) * .003;
+  if (shotgunView) {
+    const sg = shotgunView;
+    sg.recoil = damp(sg.recoil, 0, 6, recoilDt);
+    sg.flashTimer = Math.max(0, sg.flashTimer - dt * Math.max(timeFlow, .001));
+    sg.flashGroup.visible = sg.flashTimer > 0;
+    sg.flashMat.opacity = .95 * Math.min(1, sg.flashTimer / .09);
+    sg.bob += dt * (move ? 8 : 2);
+    sg.gun.position.x = sg.base.x + Math.sin(sg.bob) * (move ? .007 : .002);
+    sg.gun.position.y = sg.base.y + Math.cos(sg.bob * 2) * (move ? .006 : .002);
+    sg.gun.position.z = sg.base.z + sg.recoil * .18;
+    sg.gun.rotation.x = sg.baseRot.x + sg.recoil * .2;
+  }
 }
 
 function animate() {
@@ -6648,6 +6829,12 @@ if (PREVIEW) {
     updateEnemyHud();
     setHudObjective(2, '精英模型预览', 'PREVIEW', 'RIFLE ELITE');
   }
+  if (new URLSearchParams(location.search).get('preview') === 'shotgun') {
+    eliteKills = 3;
+    shotgunUnlocked = true;
+    selectWeapon('shotgun');
+    setHudObjective(4, '散弹枪模型预览', 'PREVIEW', '12 PELLET DISC');
+  }
   // The preview path is used by the development screenshot harness.
 }
 
@@ -6669,8 +6856,8 @@ window.__REDSHIFT__ = {
   get colliderStats() { return { total: colliders.length, missingTop: colliders.filter(c => c.top === undefined).length, high: colliders.filter(c => c.top >= 1.5).length }; },
   get shardStats() { return { count: shardGroups.length, samples: shardGroups.flatMap(s => s.pieces.slice(0, 3).map(p => ({ x: +p.position.x.toFixed(3), y: +p.position.y.toFixed(3), z: +p.position.z.toFixed(3) }))), life: shardGroups.map(s => +s.life.toFixed(3)) }; },
   get effectStats() { return { effects: effects.length, shards: shardGroups.length, lights: burstLightPool.filter(l => l.intensity > 0).length }; },
-  get assets() { return { enemy: !!GAME_ASSETS.enemyGeos.torso, pistolFrame: GAME_ASSETS.pistolFrame.length, pistolSlide: GAME_ASSETS.pistolSlide.length, enemyGun: !!GAME_ASSETS.enemyGeos.enemy_gun, eliteRifle: !!GAME_ASSETS.rifleObject, eliteFace: !!GAME_ASSETS.enemyFace }; },
-  get campaign() { return { phase: campaign.phase, wave: campaign.level, completedWaves: campaign.completedWaves, totalSpawned: campaign.totalSpawned, roomTitle: campaign.roomTitle, countdown: waveCountdown }; },
+  get assets() { return { enemy: !!GAME_ASSETS.enemyGeos.torso, pistolFrame: GAME_ASSETS.pistolFrame.length, pistolSlide: GAME_ASSETS.pistolSlide.length, enemyGun: !!GAME_ASSETS.enemyGeos.enemy_gun, eliteRifle: !!GAME_ASSETS.rifleObject, eliteFace: !!GAME_ASSETS.enemyFace, shotgun: !!GAME_ASSETS.shotgunObject }; },
+  get campaign() { return { phase: campaign.phase, wave: campaign.level, completedWaves: campaign.completedWaves, maxWaves: MAX_WAVES, eliteKills, shotgunUnlocked, currentWeapon, totalSpawned: campaign.totalSpawned, roomTitle: campaign.roomTitle, countdown: waveCountdown }; },
   get room() { return { title: campaign.roomTitle, name: ROOMS.current?.name, visible: ROOMS.levels.filter(r => r.group.visible).map(r => r.title), randomCovers: ROOMS.current?.randomColliders?.length || 0 }; },
   get enemyStates() { return activeEnemies.filter(e => e.alive).map(e => ({ elite: e.elite, hp: e.hp, state: e.state, alerted: e.alerted, ducking: e.ducking, cover: !!e.coverPoint, mag: e.mag, reload: e.reloading, burst: e.burstLeft, gap: +e.fireGapTimer.toFixed(2), los: e.hasLOS })); },
   get replayInfo() { return { mode: replay.mode, phase: replay.phase, level: replay.levelNumber, clips: levelReplayClips.map(c => ({ level: c.level, size: c.blob?.size || 0 })), queue: replay.finalQueue.length, recorder: !!replay.recorder, state: gameState, visible: !ui.replayScreen.classList.contains('hidden'), kicker: ui.replayKicker?.textContent || '' }; },
