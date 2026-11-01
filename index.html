@@ -6634,6 +6634,18 @@ if (PREVIEW) {
   ui.end.classList.add('hidden');
   gameState = 'playing';
   isLocked = false;
+  if (new URLSearchParams(location.search).get('preview') === 'elite') {
+    campaign.level = 2;
+    campaign.phase = 'WAVE_COMBAT';
+    const demo = new Enemy(0, 8, 0, 1.2, true);
+    demo.beginAlert(camera.position);
+    demo.attackPose = 1;
+    demo.update(0, 0, camera.position, true);
+    activeEnemies.push(demo);
+    totalEnemies = 1;
+    updateEnemyHud();
+    setHudObjective(2, '精英模型预览', 'PREVIEW', 'RIFLE ELITE');
+  }
   // The preview path is used by the development screenshot harness.
 }
 
