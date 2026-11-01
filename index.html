@@ -19,12 +19,12 @@ window.setTimeout(()=>{if(!window.__redlineReady){const note=document.getElement
 <div class="overlay" id="overlay"><div class="panel"><div class="eyebrow">AN EXPERIMENT IN TIME</div><h1 class="title">RED<br><span>LINE</span></h1><div class="desc">时间只在你行动时流逝。<br>看准时机，穿过弹雨，清除所有敌人。</div><div class="controls"><div><b>W A S D</b>移动</div><div><b>MOUSE</b>环顾四周</div><div><b>LEFT CLICK</b>射击</div><div><b>SHIFT / M</b>冲刺 / 音乐</div></div><button class="start" id="start">进入模拟　→</button><div class="foot">CQB SIMULATION 01　/　SYNTH SCORE • M TOGGLE</div></div></div>
 <script type="module" onerror="document.getElementById('boot-error').style.display='block'">
 import * as THREE from './assets/three.module.js';
-const scene=new THREE.Scene();scene.background=new THREE.Color(0xd4bf91);scene.fog=new THREE.Fog(0xd4bf91,34,82);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xf4f4f2);scene.fog=new THREE.Fog(0xf4f4f2,46,105);
 const enemyFaceTexture=new THREE.TextureLoader().load('./assets/enemy-face.png');enemyFaceTexture.colorSpace=THREE.SRGBColorSpace;const enemyFaceMaterial=new THREE.MeshBasicMaterial({map:enemyFaceTexture,side:THREE.DoubleSide,toneMapped:false});
 const camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.1,100);camera.position.set(0,1.65,8);
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;document.body.appendChild(renderer.domElement);
-scene.add(new THREE.HemisphereLight(0xffedcc,0x695136,2.35));const sun=new THREE.DirectionalLight(0xffe0ad,3.2);sun.position.set(-5,10,5);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun);
-const mats={floor:new THREE.MeshStandardMaterial({color:0xc1a16b,roughness:.96}),wall:new THREE.MeshStandardMaterial({color:0xe1c895,roughness:.9}),dark:new THREE.MeshStandardMaterial({color:0x755a38,roughness:.86}),red:new THREE.MeshStandardMaterial({color:0x9a7044,roughness:.7}),enemy:new THREE.MeshStandardMaterial({color:0xff263d,roughness:.4}),white:new THREE.MeshStandardMaterial({color:0xf1e3c4,roughness:.85}),glass:new THREE.MeshStandardMaterial({color:0xff263d,emissive:0x8c0714,roughness:.22}),crate:new THREE.MeshStandardMaterial({color:0x8a6338,roughness:.92}),site:new THREE.MeshStandardMaterial({color:0xcab17d,roughness:.96}),stone:new THREE.MeshStandardMaterial({color:0xb39765,roughness:.92})};
+scene.add(new THREE.HemisphereLight(0xffffff,0x8d9195,2.05));const sun=new THREE.DirectionalLight(0xffffff,2.65);sun.position.set(-5,10,5);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun);
+const mats={floor:new THREE.MeshStandardMaterial({color:0xf4f4f2,roughness:.92}),wall:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.88}),dark:new THREE.MeshStandardMaterial({color:0x202226,roughness:.72}),red:new THREE.MeshStandardMaterial({color:0xf51d3d,roughness:.42}),enemy:new THREE.MeshStandardMaterial({color:0xff1735,roughness:.34}),white:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.86}),glass:new THREE.MeshPhysicalMaterial({color:0xff1438,emissive:0x5c0010,roughness:.16,metalness:.08,transmission:.12,transparent:true,opacity:.88}),crate:new THREE.MeshStandardMaterial({color:0x2a2d32,roughness:.7}),site:new THREE.MeshStandardMaterial({color:0xf1f1ef,roughness:.9}),stone:new THREE.MeshStandardMaterial({color:0xd9dadd,roughness:.82})};
 // Camera-mounted Desert Eagle style sidearm with a procedural engraved slide decal.
 const gun=new THREE.Group();camera.add(gun);scene.add(camera);gun.position.set(.34,-.31,-.62);gun.rotation.set(-.035,-.035,0);gun.scale.setScalar(.78);const proceduralGun=new THREE.Group();gun.add(proceduralGun);
 const gunBlack=new THREE.MeshStandardMaterial({color:0x252a2d,metalness:.78,roughness:.24});
@@ -60,32 +60,23 @@ const box=(x,y,z,sx,sy,sz,mat,cast=true)=>{x*=MAP_SCALE;z*=MAP_SCALE;sx*=MAP_SCA
 const wall=(x,z,sx,sz,h=3.8,mat=mats.wall)=>box(x,h/2,z,sx,h,sz,mat);
 function arch(x,z,width=4.6,height=3.7,mat=mats.dark){box(x-width/2-.22,height/2,z,.44,height,.7,mat);box(x+width/2+.22,height/2,z,.44,height,.7,mat);box(x,height-.22,z,width+.88,.44,.7,mat)}
 function siteSign(text,x,z){const c=document.createElement('canvas');c.width=320;c.height=128;const ctx=c.getContext('2d');ctx.fillStyle='#3d3020';ctx.fillRect(0,0,320,128);ctx.strokeStyle='#d7bb83';ctx.lineWidth=8;ctx.strokeRect(6,6,308,116);ctx.fillStyle='#f4e5c6';ctx.font='bold 64px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,160,66);const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,toneMapped:false}));sprite.position.set(x*MAP_SCALE,2.75,z*MAP_SCALE);sprite.scale.set(2.8,1.12,1);scene.add(sprite)}
-// Sandstone arena perimeter and open sky.
+// Minimalist white combat labyrinth: connected loops, broad doorways, and red glass targets.
 box(0,-.15,0,34,.3,34,mats.floor,false);wall(0,-17,34,.5,7);wall(0,17,34,.5,7);wall(-17,0,.5,34,7);wall(17,0,.5,34,7);
-// Main A and B approach tunnels running from the T side toward each site.
-wall(-13.7,.3,.5,17.4,3.9,mats.stone);wall(-8.8,.3,.5,17.4,3.9,mats.stone);box(-11.25,3.55,.3,4.9,.18,17.4,mats.dark,false);
-// B tunnel has a wide mid bridge opening in its west wall.
-wall(14,.3,.5,17.4,3.9,mats.stone);wall(9,.9,.5,11.8,3.9,mats.stone);wall(9,-7.5,.5,2.4,3.9,mats.stone);box(11.5,3.55,.3,4.9,.18,17.4,mats.dark,false);
-// T spawn hall and the long central mid lane.
-wall(-3.7,.5,.45,13.5,3.8,mats.stone);wall(3.7,2.7,.45,9.1,3.8,mats.stone);wall(3.7,7.4,.45,1.4,3.8,mats.stone);arch(0,8.5,5.8,3.8,mats.dark);arch(0,-6.7,5.8,3.8,mats.dark);arch(-11.25,-8.6,4.1,3.8,mats.dark);arch(11.5,-8.6,4.1,3.8,mats.dark);
-// The original Dust-style bridge route crosses mid and opens into the B tunnel.
-box(6.15,.65,-5.45,5.3,1.3,.3,mats.dark,false);box(6.15,.65,-2.95,5.3,1.3,.3,mats.dark,false);
-for(const x of [4,6.5,8.6])box(x,1.5,-4.2,.28,3,.28,mats.stone);
-arch(6.3,-5.45,3.5,3.5,mats.dark);
-// Site A and Site B courtyards, partial walls leave the tunnel entrances clear.
-box(-11.25,.015,-11.5,8.2,.025,7.2,mats.site,false);box(11.5,.015,-11.5,8.2,.025,7.2,mats.site,false);
-wall(-11.25,-15.2,8.2,.45,4,mats.stone);wall(-15.35,-11.4,.45,7.6,4,mats.stone);wall(-7.15,-11.4,.45,7.6,4,mats.stone);
-wall(11.5,-15.2,8.2,.45,4,mats.stone);wall(7.4,-11.4,.45,7.6,4,mats.stone);wall(15.6,-11.4,.45,7.6,4,mats.stone);
-siteSign('SITE A',-11.25,-15.2);siteSign('SITE B',11.5,-15.2);siteSign('T SPAWN',0,15.1);siteSign('MID',0,-.8);
-// Crates, low cover and stone columns create familiar Dust sightlines without sealing routes.
-for(const [x,z,sx,sz,h] of [[-14,-11,1.8,1.8,1.45],[-9,-13,2,1.5,1.25],[-11,-9,1.4,1.4,1.1],[9,-11,1.8,1.8,1.4],[14,-13,2,1.5,1.25],[12,-9,1.4,1.4,1.1],[-5,1,2.3,1.2,1.1],[5,2,2.3,1.2,1.1],[0,-1,1.8,1.8,1.35],[-3,7,2.2,1.3,1.05],[3,12,2,1.5,1.2]])box(x,h/2,z,sx,h,sz,mats.crate);
-for(const [x,z] of [[-6,-4],[-6,4],[6,4],[0,4],[0,-4]]){box(x,1.75,z,.65,3.5,.65,mats.stone);box(x,3.56,z,.9,.12,.9,mats.red)}
-// Desert architecture: archways, flat roofs over tunnel mouths, wall ledges and warm lamps.
-for(const [x,z,w] of [[-11.25,8.7,4.2],[11.5,8.7,4.2],[-11.25,-8.6,4.2],[11.5,-8.6,4.2],[0,8.5,5.8],[0,-6.7,5.8]])arch(x,z,w,3.8,mats.stone);
-for(const [x,z,sx,sz] of [[-6,-12,3.5,2.2],[6,-12,3.5,2.2],[-15,3,2,4],[15,4,2,4],[-4,-15,3,.5],[4,-15,3,.5]]){box(x,2.2,z,sx,.25,sz,mats.stone,false);box(x,1.15,z,sx*.72,2.3,sz*.7,mats.dark)}
-const lampMat=new THREE.MeshBasicMaterial({color:0xffe1a5});for(const [x,z] of [[-11,4],[11,4],[0,2],[-11,-12],[11,-12]]){box(x,3.35,z,.45,.12,.2,lampMat,false);const lamp=new THREE.PointLight(0xffc875,1.25,9,2);lamp.position.set(x*MAP_SCALE,3.2,z*MAP_SCALE);scene.add(lamp)}
-// Sand lane markers, faded stone paving and small alley breaks.
-for(const z of [-5,0,5])box(0,.012,z,5.8,.018,.08,mats.white,false);for(const x of [-14,-11,-8,8,11,14])box(x,.013,1,.035,.018,12,mats.stone,false);
+// White room shells form three connected lanes around a central combat court.
+wall(-8,-7.6,.32,10.8,4.8);wall(-8,7.6,.32,10.8,4.8);wall(8,-7.6,.32,10.8,4.8);wall(8,7.6,.32,10.8,4.8);wall(0,-8,11,.32,4.8);wall(0,8,11,.32,4.8);
+// Split partitions leave unmistakable, generously sized openings at each junction.
+wall(-4.8,-12,6,.32,4.4);wall(4.8,-12,6,.32,4.4);wall(-4.8,12,6,.32,4.4);wall(4.8,12,6,.32,4.4);
+wall(-12,-4.8,.32,6,4.2);wall(-12,4.8,.32,6,4.2);wall(12,-4.8,.32,6,4.2);wall(12,4.8,.32,6,4.2);
+// Floating lintels and frames are visual only, never collision blockers.
+for(const [x,z,w] of [[0,-8,10.5],[0,8,10.5],[-8,0,10.5],[8,0,10.5]]){box(x,4.35,z,w,.16,.5,mats.dark,false);box(x,4.48,z,w*.42,.07,.54,mats.red,false)}
+// Low black cover blocks, spaced to preserve clear routes and peek angles.
+for(const [x,z,sx,sz,h] of [[-3,-3,2.6,1.3,1.1],[3,3,2.6,1.3,1.1],[-12,0,1.3,3,1.2],[12,0,1.3,3,1.2],[0,-12,3,1.2,1.1],[0,12,3,1.2,1.1],[-5,5,1.5,1.5,1.25],[5,-5,1.5,1.5,1.25]])box(x,h/2,z,sx,h,sz,mats.crate);
+// Glossy red glass planes mark the combat objectives; gaps around each plane remain walkable.
+for(const [x,z,ry] of [[-5,-4,0],[5,4,0],[0,-13,0],[0,13,0],[-13,0,Math.PI/2],[13,0,Math.PI/2]]){const pane=box(x,1.55,z,.12,3.1,2.5,mats.glass,false);pane.rotation.y=ry;box(x,3.2,z,.2,.1,2.65,mats.red,false)}
+for(const [x,z] of [[-5,0],[5,0],[0,-5],[0,5]]){box(x,1.4,z,.22,2.8,.22,mats.dark);box(x,2.85,z,.42,.12,.42,mats.red,false)}
+// Clean black floor lines and soft neutral light replace the desert palette.
+for(const z of [-15,-8,0,8,15])box(0,.012,z,31,.018,.035,mats.stone,false);for(const x of [-15,-8,0,8,15])box(x,.013,0,.035,.018,31,mats.stone,false);
+const lampMat=new THREE.MeshBasicMaterial({color:0xffffff});for(const [x,z] of [[-8,0],[8,0],[0,-8],[0,8],[0,0]]){box(x,4.55,z,.55,.08,.55,lampMat,false);const lamp=new THREE.PointLight(0xffffff,1.1,11,2);lamp.position.set(x*MAP_SCALE,4.25,z*MAP_SCALE);scene.add(lamp)}
 const player={x:0,z:12*MAP_SCALE,yaw:0,pitch:0,vel:new THREE.Vector3(),health:5};let enemies=[],shots=[],enemyShots=[],particles=[],deathEffects=[],kills=0,wave=1,running=false,paused=false,last=performance.now(),fireCD=0,spawnTimer=0,timeFactor=.08,gunKick=0,flashTime=0,hitPause=0,shotAction=0,mouseHeld=false;
 let audioCtx=null,sfxBus=null,musicEnabled=true;
 const deagleShot=new Audio('./assets/deagle-shot-sounds-from-csgo.mp3');deagleShot.preload='auto';deagleShot.volume=.38;
