@@ -463,7 +463,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <div class="kicker">TIME BENDS AROUND YOU</div>
     <h1><span class="red">RED</span><span class="shift">SHIFT</span></h1>
     <div class="intro-jp">ミ ラ ク シ ス</div>
-    <p class="intro-copy">在同一张战斗地图中迎击一波又一波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，开火、投掷和转动视角都不会</b>。清空一波后有短暂间歇，下一波会更危险。阵亡后结算击杀与存活波次。</p>
+    <p class="intro-copy">在同一张战斗地图中迎击一波又一波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，开火、投掷和转动视角都不会</b>。带头像贴纸的步枪精英需要命中两次。清空一波后有短暂间歇，下一波会更危险。阵亡后结算击杀与存活波次。</p>
     <div class="intro-actions">
       <button class="enter-btn" id="enter-btn" type="button"><span>进入模拟</span><span>ENTER SIMULATION</span><span class="arrow">↗</span></button>
       <div class="enter-note"><b>点击画面锁定鼠标</b>CLICK ANYWHERE TO ENGAGE</div>
@@ -1766,7 +1766,7 @@ function buildWeapon() {
 }
 
 async function loadGameAssets() {
-  const assets = { enemyGeos: {}, pistolFrame: [], pistolSlide: [], pistolObject: null };
+  const assets = { enemyGeos: {}, pistolFrame: [], pistolSlide: [], pistolObject: null, rifleObject: null, enemyFace: null };
   const loader = new GLTFLoader();
   try {
     const gltf = await loader.loadAsync('assets/models/enemy_parts.glb');
@@ -1779,6 +1779,29 @@ async function loadGameAssets() {
     assets.pistolObject = await new OBJLoader().loadAsync('assets/models/Pistol_2.obj');
   } catch (error) {
     console.warn('[RED SHIFT] Quaternius pistol unavailable; loading original sidearm.', error);
+  }
+  try {
+    assets.rifleObject = await new OBJLoader().loadAsync('assets/models/AssaultRifle2_2.obj');
+    const colors = { Main: 0x303b44, MainDark: 0x121a22, MainLight: 0x687985 };
+    const materials = Object.fromEntries(Object.entries(colors).map(([name, color]) => [name,
+      new THREE.MeshStandardMaterial({ color, metalness: .48, roughness: .38, flatShading: true })
+    ]));
+    assets.rifleObject.traverse(obj => {
+      if (!obj.isMesh) return;
+      const assign = mat => materials[mat?.name] || materials.Main;
+      obj.material = Array.isArray(obj.material) ? obj.material.map(assign) : assign(obj.material);
+      obj.castShadow = true;
+      obj.receiveShadow = false;
+    });
+  } catch (error) {
+    console.warn('[RED SHIFT] Elite rifle unavailable; using simplified rifle.', error);
+  }
+  try {
+    assets.enemyFace = await new THREE.TextureLoader().loadAsync('assets/enemy-face.png');
+    assets.enemyFace.colorSpace = THREE.SRGBColorSpace;
+    assets.enemyFace.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  } catch (error) {
+    console.warn('[RED SHIFT] Elite face texture unavailable.', error);
   }
   try {
     if (!assets.pistolObject) {
@@ -2280,6 +2303,11 @@ const enemyGunMat = new THREE.MeshPhysicalMaterial({
 const enemyAssetGunMat = enemyGunMat.clone();
 enemyAssetGunMat.flatShading = true;
 enemyAssetGunMat.needsUpdate = true;
+const eliteFaceMatHealthy = GAME_ASSETS.enemyFace
+  ? new THREE.MeshBasicMaterial({ map: GAME_ASSETS.enemyFace, side: THREE.DoubleSide, toneMapped: false })
+  : null;
+const eliteFaceMatDamaged = eliteFaceMatHealthy?.clone() || null;
+if (eliteFaceMatDamaged) eliteFaceMatDamaged.color.setHex(0xffa9a9);
 const enemyShadowGeo = new THREE.PlaneGeometry(1.24, 1.56);
 const enemyThreatHaloGeo = new THREE.PlaneGeometry(2.55, 2.55);
 const enemyShadowMat = new THREE.MeshBasicMaterial({
@@ -2293,6 +2321,9 @@ const enemyGunSlideGeo = new THREE.BoxGeometry(.034, .03, .145);
 const enemyGunGripGeo = new THREE.BoxGeometry(.03, .072, .043);
 const enemyGunBarrelGeo = new THREE.CylinderGeometry(.011, .013, .05, 8);
 const enemyGunGuardGeo = new THREE.BoxGeometry(.04, .009, .055);
+const eliteFaceGeo = new THREE.PlaneGeometry(.225, .255);
+const eliteArmorPipGeo = new THREE.BoxGeometry(.115, .026, .018);
+const eliteArmorPipMat = new THREE.MeshBasicMaterial({ color: 0x8ef4ff, toneMapped: false });
 const torsoGeo = makeTorsoGeometry();
 const upperArmGeo = makeFacetedLimb(.32, .063, .058, .043, 6);
 const forearmGeo = makeFacetedLimb(.28, .047, .046, .033, 5);
@@ -2319,14 +2350,24 @@ function rigPivot(parent, x, y, z) {
 }
 
 class Enemy {
-  constructor(x, z, index, scale = 1) {
+  constructor(x, z, index, scale = 1, elite = false) {
     this.index = index;
     this.alive = true;
+    this.elite = elite;
+    this.maxHp = elite ? 2 : 1;
+    this.hp = this.maxHp;
     this.phase = Math.random() * Math.PI * 2;
     this.walk = 0;
     this.attackPose = 0;
     this.hitParts = [];
-    this.attrs = enemyAttrs();
+    const baseAttrs = enemyAttrs();
+    this.attrs = elite ? {
+      ...baseAttrs,
+      accuracy: Math.min(.9, baseAttrs.accuracy + .10),
+      fireGap: baseAttrs.fireGap * .78,
+      mag: baseAttrs.mag + 6,
+      reload: baseAttrs.reload * .86
+    } : baseAttrs;
     this.level = campaign.level;
     this.state = 'PATROL';
     this.alerted = false;
@@ -2449,6 +2490,7 @@ class Enemy {
     G.add(threatHalo);
 
     if (GAME_ASSETS.enemyGeos.torso) this.applyAssetModel();
+    if (this.elite) this.applyEliteGear();
 
     this.facePlayer(0, true);
     this.update(0, 0, camera.position, true);
@@ -2508,6 +2550,52 @@ class Enemy {
     this.handGlow = addGlow(this.gunMuzzle, 0, 0, 0, .4, .4, 0xff2f50, .0, handGlowPool.take());
 
     for (const part of this.hitParts) part.userData.enemy = this;
+  }
+
+  applyEliteGear() {
+    const oldGun = this.gun;
+    const glow = this.handGlow;
+    if (oldGun?.parent) oldGun.parent.remove(oldGun);
+    const gun = new THREE.Group();
+    gun.position.set(0, -.03, .02);
+    if (GAME_ASSETS.rifleObject) {
+      const rifle = GAME_ASSETS.rifleObject.clone(true);
+      rifle.scale.setScalar(.22);
+      rifle.rotation.y = -Math.PI / 2;
+      rifle.position.set(0, -.015, .025);
+      gun.add(rifle);
+    } else {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(.10, .085, .49), enemyGunMat);
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(.038, .038, .27), enemyAssetGunMat);
+      barrel.position.z = .36;
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(.14, .11, .20), enemyGunMat);
+      stock.position.z = -.30;
+      const magazine = new THREE.Mesh(new THREE.BoxGeometry(.09, .20, .07), enemyGunMat);
+      magazine.position.set(0, -.13, .06);
+      gun.add(body, barrel, stock, magazine);
+    }
+    this.gunMuzzle = new THREE.Object3D();
+    this.gunMuzzle.position.set(0, .04, GAME_ASSETS.rifleObject ? .76 : .52);
+    gun.add(this.gunMuzzle);
+    this.gunMuzzle.add(glow);
+    glow.position.set(0, 0, 0);
+    this.arms[1].hand.add(gun);
+    this.gun = gun;
+
+    if (eliteFaceMatHealthy) {
+      this.faceSticker = new THREE.Mesh(eliteFaceGeo, eliteFaceMatHealthy);
+      this.faceSticker.position.set(0, .035, .119);
+      this.faceSticker.userData.enemy = this;
+      this.head.add(this.faceSticker);
+      this.hitParts.push(this.faceSticker);
+    }
+    this.armorPips = [];
+    for (const x of [-.072, .072]) {
+      const pip = new THREE.Mesh(eliteArmorPipGeo, eliteArmorPipMat);
+      pip.position.set(x, .29, .085);
+      this.head.add(pip);
+      this.armorPips.push(pip);
+    }
   }
 
   facePlayer(dt, instant = false) {
@@ -2694,8 +2782,8 @@ class Enemy {
   }
 
   startBurst() {
-    this.burstLeft = randInt(2, 3);
-    this.burstTimer = .045;
+    this.burstLeft = this.elite ? randInt(3, 4) : randInt(2, 3);
+    this.burstTimer = this.elite ? .035 : .045;
     this.ducking = false;
   }
 
@@ -2788,7 +2876,7 @@ class Enemy {
           this.firePistol(playerPos);
           this.mag--;
           this.burstLeft--;
-          this.burstTimer = .12;
+          this.burstTimer = this.elite ? .085 : .12;
           if (this.burstLeft <= 0) this.finishBurst();
         } else {
           this.finishBurst();
@@ -2854,9 +2942,9 @@ class Enemy {
 
     const la = this.arms[0], ra = this.arms[1];
     const attack = this.attackPose;
-    la.shoulder.rotation.x = -.09 - stride * .28 * this.walk + .025 * idle + crouch * .22;
-    la.shoulder.rotation.z = -.065 - .018 * idle;
-    la.elbow.rotation.x = -.16 + stride * .1 * this.walk - .035 * idle - crouch * .22;
+    la.shoulder.rotation.x = -.09 - stride * .28 * this.walk + .025 * idle + crouch * .22 - (this.elite ? .88 * attack : 0);
+    la.shoulder.rotation.z = -.065 - .018 * idle + (this.elite ? .40 * attack : 0);
+    la.elbow.rotation.x = -.16 + stride * .1 * this.walk - .035 * idle - crouch * .22 - (this.elite ? .22 * attack : 0);
     ra.shoulder.rotation.x = -.09 + stride * .28 * this.walk - 1.25 * attack - .02 * idle + crouch * .20;
     ra.shoulder.rotation.z = .065 + .16 * attack;
     ra.elbow.rotation.x = -.16 + stride * .1 * this.walk - .24 * attack - crouch * .10;
@@ -2892,7 +2980,7 @@ class Enemy {
     dir.z += rand(-spread, spread);
     dir.normalize();
 
-    const bullet = createBulletVisual(enemyTracerMat, enemyBulletGlowMat, .82, enemyTracerAuraMat);
+    const bullet = createBulletVisual(enemyTracerMat, enemyBulletGlowMat, this.elite ? .92 : .82, enemyTracerAuraMat);
     bullet.core.userData.projectile = true;
     bullet.group.position.copy(start);
     bullet.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
@@ -2900,13 +2988,13 @@ class Enemy {
     enemyProjectiles.push({
       mesh: bullet.core,
       group: bullet.group,
-      velocity: dir.multiplyScalar(24),
+      velocity: dir.multiplyScalar(this.elite ? 30 : 24),
       life: 6.5
     });
   }
 
   onHit(point, normal) {
-    return defeatEnemy(this, point, normal);
+    return damageEnemy(this, point, normal);
   }
 
   disposeExtras() {
@@ -3131,9 +3219,27 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
   });
 }
 
+function damageEnemy(enemy, hitPoint, normal = null) {
+  if (!enemy || !enemy.alive) return false;
+  enemy.hp = Math.max(0, enemy.hp - 1);
+  if (enemy.hp === 0) return defeatEnemy(enemy, hitPoint, normal);
+
+  const point = hitPoint || new THREE.Vector3(enemy.group.position.x, 1.5 * enemy.group.scale.y, enemy.group.position.z);
+  addImpact(point, normal, 0xffd7de, true);
+  sound.hit();
+  if (enemy.armorPips) enemy.armorPips[1].visible = false;
+  if (enemy.faceSticker) enemy.faceSticker.material = eliteFaceMatDamaged;
+  enemy.beginAlert(camera.position);
+  ui.hitmarker.classList.add('hit');
+  setTimeout(() => ui.hitmarker.classList.remove('hit'), 160);
+  toast('精英受创 · 再命中一次', 1100);
+  return false;
+}
+
 function defeatEnemy(enemy, hitPoint, normal = null) {
   if (!enemy || !enemy.alive) return false;
   enemy.alive = false;
+  enemy.hp = 0;
   const point = hitPoint
     ? hitPoint.clone()
     : new THREE.Vector3(enemy.group.position.x, 1.18 * enemy.group.scale.y, enemy.group.position.z);
@@ -3182,12 +3288,14 @@ function spawnEnemies(count = 1) {
     if (chosen.some(([cx, cz]) => Math.hypot(cx - x, cz - z) < 1.4)) continue;
     chosen.push([x, z]);
   }
+  const eliteCount = campaign.level < 2 ? 0 : Math.min(3, Math.max(1, Math.floor((chosen.length + 1) / 3)));
   for (let i = 0; i < chosen.length; i++) {
-    const enemy = new Enemy(chosen[i][0], chosen[i][1], i, rand(.98, 1.07));
+    const enemy = new Enemy(chosen[i][0], chosen[i][1], i, rand(.98, 1.07), i < eliteCount);
     activeEnemies.push(enemy);
   }
   totalEnemies = activeEnemies.length;
   updateEnemyHud();
+  return eliteCount;
 }
 
 /* --------------------------------------------------------------------------
@@ -4318,13 +4426,13 @@ function startCombat(wave) {
   campaign.level = wave;
   const range = LEVEL_COUNTS[Math.min(wave, 5)] || [5, 7];
   const count = Math.min(8, randInt(range[0], range[1]) + Math.max(0, wave - 5));
-  spawnEnemies(count);
+  const eliteCount = spawnEnemies(count);
   campaign.levelSpawned = totalEnemies;
   campaign.totalSpawned += totalEnemies;
   campaign.phase = 'WAVE_COMBAT';
-  setHudObjective(wave, '清除敌方信号', 'HOSTILE', `${campaign.roomTitle} · WAVE ${String(wave).padStart(2, '0')}`);
+  setHudObjective(wave, '清除敌方信号', 'HOSTILE', `${campaign.roomTitle} · WAVE ${String(wave).padStart(2, '0')}${eliteCount ? ` · 精英 ${eliteCount}` : ''}`);
   refreshObjectiveBanner();
-  toast(`WAVE ${String(wave).padStart(2, '0')} · ${count} 个敌方信号`, 1800);
+  toast(`WAVE ${String(wave).padStart(2, '0')} · ${totalEnemies} 个敌方信号${eliteCount ? ` / ${eliteCount} 名精英` : ''}`, 1800);
 }
 
 function retryLevel() {
@@ -4452,6 +4560,9 @@ function warmSharedShaders() {
   enemyWarm.group.position.set(0, 0, 3.2);
   enemyWarm.group.frustumCulled = false;
   enemyWarm.group.traverse(o => { o.frustumCulled = false; });
+  const eliteWarm = new Enemy(1.1, 3.2, 100, .9, true);
+  eliteWarm.group.frustumCulled = false;
+  eliteWarm.group.traverse(o => { o.frustumCulled = false; });
   scene.add(warm);
   const preShards = shardGroups.length;
   const preEffects = effects.length;
@@ -4491,6 +4602,7 @@ function warmSharedShaders() {
   clearObjectives();
   scene.remove(warm);
   if (enemyWarm.group.parent) enemyWarm.group.parent.remove(enemyWarm.group);
+  if (eliteWarm.group.parent) eliteWarm.group.parent.remove(eliteWarm.group);
 }
 
 function updateObjectives(now, dt) {
@@ -5802,7 +5914,7 @@ function updatePlayerBullets(dt, flow) {
           breakObjective(hitObjective, hit.point, normal);
         } else if (hitEnemy) {
           hits++;
-          defeatEnemy(hitEnemy, hit.point, normal);
+          damageEnemy(hitEnemy, hit.point, normal);
         } else if (hitProjectile) {
           hits++;
           removeProjectile(hitProjectile);
@@ -6024,7 +6136,7 @@ function updateThrownPistol(dt, flow) {
     }
     if (enemyHit && (!worldHit || enemyHit.t <= (worldHit.distance / Math.max(dist, .0001)))) {
       hits++;
-      defeatEnemy(enemyHit.enemy, enemyHit.point, dir.clone().negate());
+      damageEnemy(enemyHit.enemy, enemyHit.point, dir.clone().negate());
       finishThrownPistol(enemyHit.point);
       return;
     }
@@ -6543,10 +6655,10 @@ window.__REDSHIFT__ = {
   get colliderStats() { return { total: colliders.length, missingTop: colliders.filter(c => c.top === undefined).length, high: colliders.filter(c => c.top >= 1.5).length }; },
   get shardStats() { return { count: shardGroups.length, samples: shardGroups.flatMap(s => s.pieces.slice(0, 3).map(p => ({ x: +p.position.x.toFixed(3), y: +p.position.y.toFixed(3), z: +p.position.z.toFixed(3) }))), life: shardGroups.map(s => +s.life.toFixed(3)) }; },
   get effectStats() { return { effects: effects.length, shards: shardGroups.length, lights: burstLightPool.filter(l => l.intensity > 0).length }; },
-  get assets() { return { enemy: !!GAME_ASSETS.enemyGeos.torso, pistolFrame: GAME_ASSETS.pistolFrame.length, pistolSlide: GAME_ASSETS.pistolSlide.length, enemyGun: !!GAME_ASSETS.enemyGeos.enemy_gun }; },
+  get assets() { return { enemy: !!GAME_ASSETS.enemyGeos.torso, pistolFrame: GAME_ASSETS.pistolFrame.length, pistolSlide: GAME_ASSETS.pistolSlide.length, enemyGun: !!GAME_ASSETS.enemyGeos.enemy_gun, eliteRifle: !!GAME_ASSETS.rifleObject, eliteFace: !!GAME_ASSETS.enemyFace }; },
   get campaign() { return { phase: campaign.phase, wave: campaign.level, completedWaves: campaign.completedWaves, totalSpawned: campaign.totalSpawned, roomTitle: campaign.roomTitle, countdown: waveCountdown }; },
   get room() { return { title: campaign.roomTitle, name: ROOMS.current?.name, visible: ROOMS.levels.filter(r => r.group.visible).map(r => r.title), randomCovers: ROOMS.current?.randomColliders?.length || 0 }; },
-  get enemyStates() { return activeEnemies.filter(e => e.alive).map(e => ({ state: e.state, alerted: e.alerted, ducking: e.ducking, cover: !!e.coverPoint, mag: e.mag, reload: e.reloading, burst: e.burstLeft, gap: +e.fireGapTimer.toFixed(2), los: e.hasLOS })); },
+  get enemyStates() { return activeEnemies.filter(e => e.alive).map(e => ({ elite: e.elite, hp: e.hp, state: e.state, alerted: e.alerted, ducking: e.ducking, cover: !!e.coverPoint, mag: e.mag, reload: e.reloading, burst: e.burstLeft, gap: +e.fireGapTimer.toFixed(2), los: e.hasLOS })); },
   get replayInfo() { return { mode: replay.mode, phase: replay.phase, level: replay.levelNumber, clips: levelReplayClips.map(c => ({ level: c.level, size: c.blob?.size || 0 })), queue: replay.finalQueue.length, recorder: !!replay.recorder, state: gameState, visible: !ui.replayScreen.classList.contains('hidden'), kicker: ui.replayKicker?.textContent || '' }; },
   skipReplayNow() { if (gameState !== 'replay') return; if (replay.phase === 'playing') endReplayPlayback(); else replay.skipRequested = true; },
   
