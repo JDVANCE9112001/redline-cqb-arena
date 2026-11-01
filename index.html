@@ -394,7 +394,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
       <div><h1>RED SHIFT</h1><p>MIRAXIS ATRIUM / SIMULATION 01</p></div>
     </div>
     <div class="objective">
-      <div class="obj-eyebrow"><span>LEVEL <b id="level-label">1 / 5</b> · <span id="phase-label">START</span></span><b>LIVE</b></div>
+      <div class="obj-eyebrow"><span>WAVE <b id="level-label">01</b> · <span id="phase-label">READY</span></span><b>LIVE</b></div>
       <div class="obj-main"><span id="objective-text">击碎 START</span><strong><em>×</em><span id="enemy-count">00</span></strong></div>
       <div class="pips" id="pips"></div>
       <div class="run-clock">SHIFT TIME&nbsp; <b id="run-time">00:00</b></div>
@@ -445,7 +445,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
 
 <div id="damage-flash" aria-hidden="true"></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<div id="objective-banner"><span>OBJECTIVE</span><b id="objective-msg">击碎 START</b><em id="objective-extra"></em></div>
+  <div id="objective-banner"><span>OBJECTIVE</span><b id="objective-msg">准备迎战</b><em id="objective-extra"></em></div>
 <div id="level-transition" aria-live="polite"><div class="transition-card"><div class="transition-kicker" id="transition-kicker">ROOM PROTOCOL</div><h2 id="transition-title">LEVEL 1<small>MIRAXIS / TRAINING ROOM</small></h2><p id="transition-sub">BREAK START TO BEGIN</p><div class="transition-bar"><i></i></div></div></div>
 
 <section id="start" class="overlay" aria-label="游戏开始">
@@ -463,7 +463,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <div class="kicker">TIME BENDS AROUND YOU</div>
     <h1><span class="red">RED</span><span class="shift">SHIFT</span></h1>
     <div class="intro-jp">ミ ラ ク シ ス</div>
-    <p class="intro-copy">你进入了米拉克西斯训练协议。<b>静止时时间慢放 30 倍；只有移动会恢复原速，开火、投掷和转动视角都不会</b>。先击碎 <b>START</b> 开启本关，清除所有红色玻璃信号后击碎 <b>FINISH</b> 才会传送。五个封闭房间、五个 START，一次只打一关。</p>
+    <p class="intro-copy">在同一张战斗地图中迎击一波又一波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，开火、投掷和转动视角都不会</b>。清空一波后有短暂间歇，下一波会更危险。阵亡后结算击杀与存活波次。</p>
     <div class="intro-actions">
       <button class="enter-btn" id="enter-btn" type="button"><span>进入模拟</span><span>ENTER SIMULATION</span><span class="arrow">↗</span></button>
       <div class="enter-note"><b>点击画面锁定鼠标</b>CLICK ANYWHERE TO ENGAGE</div>
@@ -486,21 +486,21 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
   <div class="pause-card">
     <div class="overline">SIGNAL SUSPENDED</div>
     <h2>模拟暂停</h2>
-    <p>鼠标已释放。当前房间与行动回放记录都已挂起。<br>点击继续，重新进入控制状态。</p>
+    <p>鼠标已释放，生存挑战已暂停。<br>点击继续，重新进入控制状态。</p>
     <button class="resume-btn" id="resume-btn" type="button">继续模拟 <span>RESUME ↗</span></button>
     <button class="resume-btn alt" id="pause-restart-btn" type="button">重新开始整局 <span>RESTART RUN</span></button>
-    <div class="pause-hint"><span>ESC / RELEASE POINTER</span><span>R · RETRY LEVEL &nbsp;&nbsp; M · SOUND</span></div>
+    <div class="pause-hint"><span>ESC / RELEASE POINTER</span><span>R · RESTART RUN &nbsp;&nbsp; M · SOUND</span></div>
   </div>
 </section>
 
 <section id="end" class="overlay hidden" aria-label="游戏结算">
   <div class="end-card">
     <div class="end-code"><i></i><span id="end-code">RUN COMPLETE</span></div>
-    <h2 id="end-title">ALL ROOMS CLEAR<small id="end-sub">全部关卡完成</small></h2>
-    <p class="end-copy" id="end-copy">所有红色信号已从建筑中消失。米拉克西斯中庭重新陷入寂静。</p>
+    <h2 id="end-title">SIGNAL LOST<small id="end-sub">生存挑战结束</small></h2>
+    <p class="end-copy" id="end-copy">红色信号穿透了你的时间层。</p>
     <div class="end-stats">
       <div><span>击杀 / KILLS</span><b id="stat-kills">4 / 4</b></div>
-      <div><span>重试 / RETRIES</span><b id="stat-acc">0</b></div>
+      <div><span>完成波次 / WAVES</span><b id="stat-acc">0</b></div>
       <div><span>记录 / SHIFT TIME</span><b id="stat-time">00:00</b></div>
     </div>
     <div class="end-actions">
@@ -2921,7 +2921,18 @@ function dampAngle(current, target, lambda, dt) {
 }
 
 function enemyAttrs() {
-  return ENEMY_LEVELS[clamp(campaign.level || 1, 1, 5)] || ENEMY_LEVELS[1];
+  const wave = Math.max(1, campaign.level || 1);
+  const base = ENEMY_LEVELS[clamp(wave, 1, 5)] || ENEMY_LEVELS[1];
+  if (wave <= 5) return base;
+  const extra = Math.min(wave - 5, 7);
+  return {
+    ...base,
+    reaction: Math.max(.22, base.reaction - extra * .018),
+    accuracy: Math.min(.88, base.accuracy + extra * .018),
+    speed: Math.min(1.8, base.speed + extra * .04),
+    fireGap: Math.max(.42, base.fireGap - extra * .026),
+    reload: Math.max(1.35, base.reload - extra * .05)
+  };
 }
 
 function segmentHitsRect(x1, z1, x2, z2, c, pad = 0) {
@@ -3279,7 +3290,7 @@ const objectiveTargets = [];
 const campaign = {
   phase: 'BOOT',
   level: 1,
-  totalLevels: 5,
+  completedWaves: 0,
   retries: 0,
   totalSpawned: 0,
   levelSpawned: 0,
@@ -3296,6 +3307,7 @@ const ENEMY_LEVELS = [
   { detect: 22, reaction: .34, accuracy: .76, speed: 1.52, patrol: .70, preferred: 6.0, fireGap: .60, hide: .38, mag: 10, reload: 1.7, peek: .54 }
 ];
 let transitionTimer = 0;
+let waveCountdown = 0;
 
 function randInt(min, max) {
   return Math.floor(min + Math.random() * (max - min + 1));
@@ -3801,13 +3813,7 @@ function randomizeRoomCover(room) {
 function ensureRooms() {
   if (ROOMS.start) return;
   ROOMS.start = buildStartRoom();
-  ROOMS.levels = [
-    buildCombatRoom(),
-    buildWarehouseRoom(),
-    buildServerRoom(),
-    buildWardRoom(),
-    buildRooftopRoom()
-  ];
+  ROOMS.levels = [buildWarehouseRoom()];
 }
 
 function activeObjectiveMeshes() {
@@ -4047,7 +4053,7 @@ function screenShake() {
 
 function setHudObjective(level, text, phase, extra = '') {
   campaign.level = level;
-  ui.levelLabel.textContent = `${level} / ${campaign.totalLevels}`;
+  ui.levelLabel.textContent = String(level).padStart(2, '0');
   ui.phaseLabel.textContent = phase;
   ui.objectiveText.textContent = text;
   ui.objectiveMsg.textContent = text;
@@ -4056,7 +4062,7 @@ function setHudObjective(level, text, phase, extra = '') {
 }
 
 function refreshObjectiveBanner() {
-  const show = gameState === 'playing' && !['TRANSITION', 'LEVEL_CLEAR', 'VICTORY', 'DEAD'].includes(campaign.phase);
+  const show = gameState === 'playing' && !['DEAD'].includes(campaign.phase);
   ui.objectiveBanner.classList.toggle('show', show);
 }
 
@@ -4218,84 +4224,29 @@ function resetPlayerAt(room) {
   ui.telemetry.classList.remove('moving');
 }
 
-function startCombat(level) {
-  clearObjectives();
-  campaign.level = level;
-  const range = LEVEL_COUNTS[level] || [1, 3];
-  const count = randInt(range[0], range[1]);
+function startCombat(wave) {
+  clearLevelEntities();
+  waveCountdown = 0;
+  campaign.level = wave;
+  const range = LEVEL_COUNTS[Math.min(wave, 5)] || [5, 7];
+  const count = Math.min(8, randInt(range[0], range[1]) + Math.max(0, wave - 5));
   campaign.levelSpawned = count;
   campaign.totalSpawned += count;
   spawnEnemies(count);
-  campaign.phase = 'LEVEL_COMBAT';
-  setHudObjective(level, '清除敌方信号', 'HOSTILE', `${campaign.roomTitle || ''} · LEVEL ${level} / 5`);
+  campaign.phase = 'WAVE_COMBAT';
+  setHudObjective(wave, '清除敌方信号', 'HOSTILE', `${campaign.roomTitle} · WAVE ${String(wave).padStart(2, '0')}`);
   refreshObjectiveBanner();
-}
-
-function prepareLevel(level, { withStart = false } = {}) {
-  const room = ROOMS.levels[level - 1] || ROOMS.levels[0];
-  clearLevelEntities();
-  randomizeRoomCover(room);
-  activateRoom(room);
-  resetPlayerAt(room);
-  document.body.classList.toggle('roof-room', room.title === 'ROOFTOP');
-  campaign.level = level;
-  campaign.roomTitle = room.title;
-  campaign.phase = withStart ? 'LEVEL_START' : 'LEVEL_COMBAT';
-  if (withStart) {
-    spawnStartGate();
-  } else {
-    startCombat(level);
-  }
+  toast(`WAVE ${String(wave).padStart(2, '0')} · ${count} 个敌方信号`, 1800);
 }
 
 function retryLevel() {
-  if (!['LEVEL_COMBAT', 'AWAIT_FINISH', 'LEVEL_START'].includes(campaign.phase)) return;
-  discardReplayRecording();
-  campaign.phase = 'DEAD';
-  campaign.retries++;
-  gameState = 'dying';
-  sound.hurt();
-  ui.damage.classList.add('on');
-  setTimeout(() => ui.damage.classList.remove('on'), 550);
-  showTransitionUI({
-    title: 'SIGNAL LOST<small>RETRY / CURRENT LEVEL</small>',
-    sub: `重新载入 LEVEL ${campaign.level} · 敌人与位置重新随机`,
-    kicker: 'TIME FRACTURE / RETRY',
-    dead: true,
-    ms: 980,
-    onMid: () => prepareLevel(campaign.level, { withStart: true }),
-    onDone: () => {
-      gameState = 'playing';
-      refreshObjectiveBanner();
-    }
-  });
-}
-
-function completeLevel() {
-  if (campaign.phase !== 'AWAIT_FINISH') return;
-  campaign.phase = 'LEVEL_CLEAR';
-  gameState = 'clear';
-  sound.won();
-  const n = campaign.level;
-  const last = n >= campaign.totalLevels;
-  toast(`LEVEL ${n} CLEAR · 正在整理本关回放…`, 2200);
-  stopLevelClipRecording().then(clip => {
-    if (clip) {
-      playReplayClip(clip, {
-        mode: 'level',
-        label: `LEVEL ${String(n).padStart(2, '0')} REPLAY / PLAYER ACTION`,
-        onEnd: () => advanceAfterLevelReplay(n, last)
-      });
-    } else {
-      advanceAfterLevelReplay(n, last);
-    }
-  });
+  startCampaign();
+  if (isLocked) enterSimulation();
+  else beginRunWithLock();
 }
 
 function breakObjective(target, point, normal = null) {
   if (!target || !target.active) return;
-  const kind = target.kind;
-  const phase = campaign.phase;
   removeObjectiveTarget(target);
   const index = objectiveTargets.indexOf(target);
   if (index >= 0) objectiveTargets.splice(index, 1);
@@ -4306,24 +4257,6 @@ function breakObjective(target, point, normal = null) {
   ui.hitmarker.classList.add('hit', 'kill');
   setTimeout(() => ui.hitmarker.classList.remove('hit', 'kill'), 180);
 
-  if (kind === 'FINISH') {
-    completeLevel();
-    return;
-  }
-
-  if (phase === 'START_ROOM' || phase === 'LEVEL_START') {
-    clearTimeout(transitionTimer);
-    ui.levelTransition.classList.remove('show', 'dead');
-    if (phase === 'START_ROOM') {
-      campaign.firstLevelFromStart = false;
-      prepareLevel(1, { withStart: false });
-    }
-    gameState = 'playing';
-    setUIVisible('playing');
-    startCombat(campaign.level);
-    startLevelClipRecording(campaign.level);
-    refreshObjectiveBanner();
-  }
 }
 
 function startCampaign() {
@@ -4339,9 +4272,10 @@ function startCampaign() {
   replay.mode = 'idle';
   replay.afterPlayback = null;
   clearLevelEntities();
-  campaign.phase = 'START_ROOM';
+  campaign.phase = 'SURVIVAL_READY';
   campaign.level = 1;
-  campaign.roomTitle = 'INSERTION';
+  campaign.completedWaves = 0;
+  campaign.roomTitle = 'WAREHOUSE';
   campaign.retries = 0;
   campaign.totalSpawned = 0;
   campaign.levelSpawned = 0;
@@ -4358,12 +4292,14 @@ function startCampaign() {
   elapsedPaint = 0;
   ui.elapsedTime.textContent = '0.00';
   ui.runTime.textContent = '00:00';
-  activateRoom(ROOMS.start);
-  resetPlayerAt(ROOMS.start);
-  spawnObjective('START', new THREE.Vector3(0, 1.72, 3.2));
+  const arena = ROOMS.levels[0];
+  randomizeRoomCover(arena);
+  activateRoom(arena);
+  resetPlayerAt(arena);
+  waveCountdown = 0;
   totalEnemies = 0;
   updateEnemyHud();
-  setHudObjective(1, '击碎 START', 'START', '3M AHEAD');
+  setHudObjective(1, '准备迎战', 'READY', '点击进入生存挑战');
   ui.damage.classList.remove('on');
   ui.hitmarker.classList.remove('hit', 'kill');
   ui.objectiveBanner.classList.remove('show');
@@ -4435,7 +4371,6 @@ function warmSharedShaders() {
   objectiveBurstAt(new THREE.Vector3(.6, 1.5, 4.2), new THREE.Vector3(0, 0, -1));
   addImpact(new THREE.Vector3(0, 1.4, 4.2), new THREE.Vector3(0, 0, -1), 0xff8a72, true);
   addMuzzleFlash(new THREE.Vector3(0, 1.5, 4.2), 0xffc6a1);
-  const startTargetPos = objectiveTargets[0]?.group.position.clone() || new THREE.Vector3(0, 1.75, 3.2);
   const warmFinishTarget = spawnObjective('FINISH', new THREE.Vector3(0, 1.7, 4.7));
   const current = ROOMS.current;
   const objectiveWasVisible = objectiveLight.visible;
@@ -4465,7 +4400,7 @@ function warmSharedShaders() {
   for (const e of effects.slice(preEffects)) scene.remove(e.mesh);
   effects.length = preEffects;
   removeObjectiveTarget(warmFinishTarget);
-  spawnObjective('START', startTargetPos);
+  clearObjectives();
   scene.remove(warm);
   if (enemyWarm.group.parent) enemyWarm.group.parent.remove(enemyWarm.group);
 }
@@ -4569,6 +4504,7 @@ function enterSimulation() {
     ui.end.classList.add('hidden');
     lastFrame = performance.now();
     ensureAudio();
+    if (campaign.phase === 'SURVIVAL_READY') startCombat(1);
     if (replay.recorder && replay.recorder.state === 'paused') {
       resumeReplayRecording();
     }
@@ -4664,13 +4600,11 @@ function restartWorld() {
 }
 
 function fillResult(won) {
-  ui.endCode.textContent = won ? 'ALL ROOMS CLEAR / RUN COMPLETE' : 'SIGNAL LOST / CONNECTION TERMINATED';
-  ui.endTitle.innerHTML = won ? 'ALL ROOMS CLEAR<small>全部关卡完成</small>' : 'SIGNAL LOST<small>时间回收了你</small>';
-  ui.endCopy.textContent = won
-    ? '五个封闭房间的信号全部熄灭。START / FINISH 传送链路已关闭，米拉克西斯训练协议完成。逐关回放与最终总回放已保留，可随时重看。'
-    : '红色信号穿透了你的时间层。当前房间重新初始化，前置关卡进度保留。';
-  ui.statKills.textContent = `${kills} / ${campaign.totalSpawned}`;
-  ui.statAcc.textContent = String(campaign.retries);
+  ui.endCode.textContent = 'SURVIVAL RUN / SIGNAL LOST';
+  ui.endTitle.innerHTML = 'SIGNAL LOST<small>生存挑战结束</small>';
+  ui.endCopy.textContent = `你在第 ${campaign.level} 波阵亡。红色信号仍在逼近，重新进入可挑战更远的波次。`;
+  ui.statKills.textContent = String(kills);
+  ui.statAcc.textContent = String(campaign.completedWaves);
   ui.statTime.textContent = `${String(Math.floor(runElapsed / 60)).padStart(2, '0')}:${String(Math.floor(runElapsed % 60)).padStart(2, '0')}`;
 }
 
@@ -4710,8 +4644,11 @@ function finishRun(won) {
 
 function playerHit() {
   if (gameState !== 'playing') return;
-  if (!['LEVEL_COMBAT', 'AWAIT_FINISH'].includes(campaign.phase)) return;
-  retryLevel();
+  if (!['WAVE_COMBAT', 'WAVE_BREAK'].includes(campaign.phase)) return;
+  campaign.phase = 'DEAD';
+  sound.hurt();
+  ui.damage.classList.add('on');
+  finishRun(false);
 }
 
 function exitLock() {
@@ -4719,9 +4656,13 @@ function exitLock() {
 }
 
 function onAllEnemiesDown() {
-  if (pendingFinish || campaign.phase !== 'LEVEL_COMBAT') return;
+  if (campaign.phase !== 'WAVE_COMBAT') return;
   if (activeEnemies.some(e => e.alive)) return;
-  spawnFinishGate();
+  campaign.completedWaves = campaign.level;
+  campaign.phase = 'WAVE_BREAK';
+  waveCountdown = 3.5;
+  setHudObjective(campaign.level, '本波清除', 'CLEAR', `下一波将在 ${Math.ceil(waveCountdown)} 秒后抵达`);
+  toast(`WAVE ${String(campaign.level).padStart(2, '0')} CLEAR · 准备下一波`, 2400);
 }
 
 /* --------------------------------------------------------------------------
@@ -6099,7 +6040,7 @@ addEventListener('keydown', e => {
     } else if (gameState === 'paused') {
       retryAfterResume = true;
       beginRunWithLock();
-    } else if (gameState === 'won') {
+    } else if (gameState === 'dead' || gameState === 'won') {
       startCampaign();
       ui.end.classList.add('hidden');
       setUIVisible('menu');
@@ -6376,6 +6317,14 @@ function animate() {
 
   if (gameState === 'playing') {
     updatePlayer(dt);
+    if (campaign.phase === 'WAVE_BREAK') {
+      const previousSecond = Math.ceil(waveCountdown);
+      waveCountdown = Math.max(0, waveCountdown - dt);
+      if (waveCountdown <= 0) startCombat(campaign.level + 1);
+      else if (Math.ceil(waveCountdown) !== previousSecond) {
+        ui.objectiveExtra.textContent = `下一波将在 ${Math.ceil(waveCountdown)} 秒后抵达`;
+      }
+    }
     updateProjectiles(dt, timeFlow);
     updateThrownPistol(dt, timeFlow);
     for (const enemy of activeEnemies) if (enemy.alive) enemy.update(dt, timeFlow, camera.position);
