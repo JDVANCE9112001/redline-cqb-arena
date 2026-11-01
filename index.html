@@ -1845,12 +1845,12 @@ function buildShotgun() {
   const rig = new THREE.Group();
   camera.add(rig);
   const gun = new THREE.Group();
-  gun.position.set(.27, -.29, -.88);
+  gun.position.set(.35, -.32, -.52);
   gun.rotation.set(-.025, 0, .008);
   rig.add(gun);
   if (GAME_ASSETS.shotgunObject) {
     const model = GAME_ASSETS.shotgunObject.clone(true);
-    model.scale.setScalar(.19);
+    model.scale.setScalar(.23);
     model.rotation.y = Math.PI / 2;
     gun.add(model);
   } else {
@@ -1863,7 +1863,7 @@ function buildShotgun() {
     gun.add(barrel, stock);
   }
   const muzzleAnchor = new THREE.Object3D();
-  muzzleAnchor.position.set(0, .015, -.79);
+  muzzleAnchor.position.set(0, .015, -.94);
   gun.add(muzzleAnchor);
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd5a6, transparent: true, opacity: .95, depthWrite: false, side: THREE.DoubleSide });
   const flashGroup = new THREE.Mesh(new THREE.PlaneGeometry(.24, .24), flashMat);
