@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 fill=%22%23071322%22/%3E%3Crect x=%226%22 y=%226%22 width=%2220%22 height=%2220%22 fill=%22%23ff244d%22/%3E%3C/svg%3E">
 <meta name="theme-color" content="#e7f0fa">
-<title>RED SHIFT · Miraxis Atrium</title>
+<title>RED SHIFT · 生存挑战</title>
 <style>
 :root{
   --ink:#071525;
@@ -391,11 +391,11 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
   <div class="hud-top">
     <div class="brand">
       <div class="brand-sigil" aria-hidden="true"></div>
-      <div><h1>RED SHIFT</h1><p>MIRAXIS ATRIUM / SIMULATION 01</p></div>
+      <div><h1>RED SHIFT</h1><p>MIRAXIS / SURVIVAL PROTOCOL</p></div>
     </div>
     <div class="objective">
       <div class="obj-eyebrow"><span>WAVE <b id="level-label">01</b> · <span id="phase-label">READY</span></span><b>LIVE</b></div>
-      <div class="obj-main"><span id="objective-text">击碎 START</span><strong><em>×</em><span id="enemy-count">00</span></strong></div>
+      <div class="obj-main"><span id="objective-text">准备迎战</span><strong><em>×</em><span id="enemy-count">00</span></strong></div>
       <div class="pips" id="pips"></div>
       <div class="run-clock">SHIFT TIME&nbsp; <b id="run-time">00:00</b></div>
     </div>
@@ -4230,9 +4230,9 @@ function startCombat(wave) {
   campaign.level = wave;
   const range = LEVEL_COUNTS[Math.min(wave, 5)] || [5, 7];
   const count = Math.min(8, randInt(range[0], range[1]) + Math.max(0, wave - 5));
-  campaign.levelSpawned = count;
-  campaign.totalSpawned += count;
   spawnEnemies(count);
+  campaign.levelSpawned = totalEnemies;
+  campaign.totalSpawned += totalEnemies;
   campaign.phase = 'WAVE_COMBAT';
   setHudObjective(wave, '清除敌方信号', 'HOSTILE', `${campaign.roomTitle} · WAVE ${String(wave).padStart(2, '0')}`);
   refreshObjectiveBanner();
@@ -6030,6 +6030,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (e.code === 'KeyR') {
+    if (e.repeat) return;
     if (gameState === 'replay') {
       if (replay.phase === 'playing') endReplayPlayback();
       else replay.skipRequested = true;
@@ -6045,6 +6046,7 @@ addEventListener('keydown', e => {
       ui.end.classList.add('hidden');
       setUIVisible('menu');
       ui.start.classList.remove('hidden');
+      beginRunWithLock();
     }
   }
   if (e.code === 'KeyQ' && gameState === 'playing' && isLocked) {
@@ -6454,7 +6456,7 @@ window.__REDSHIFT__ = {
   get shardStats() { return { count: shardGroups.length, samples: shardGroups.flatMap(s => s.pieces.slice(0, 3).map(p => ({ x: +p.position.x.toFixed(3), y: +p.position.y.toFixed(3), z: +p.position.z.toFixed(3) }))), life: shardGroups.map(s => +s.life.toFixed(3)) }; },
   get effectStats() { return { effects: effects.length, shards: shardGroups.length, lights: burstLightPool.filter(l => l.intensity > 0).length }; },
   get assets() { return { enemy: !!GAME_ASSETS.enemyGeos.torso, pistolFrame: GAME_ASSETS.pistolFrame.length, pistolSlide: GAME_ASSETS.pistolSlide.length, enemyGun: !!GAME_ASSETS.enemyGeos.enemy_gun }; },
-  get campaign() { return { phase: campaign.phase, level: campaign.level, retries: campaign.retries, totalSpawned: campaign.totalSpawned, roomTitle: campaign.roomTitle }; },
+  get campaign() { return { phase: campaign.phase, wave: campaign.level, completedWaves: campaign.completedWaves, totalSpawned: campaign.totalSpawned, roomTitle: campaign.roomTitle, countdown: waveCountdown }; },
   get room() { return { title: campaign.roomTitle, name: ROOMS.current?.name, visible: ROOMS.levels.filter(r => r.group.visible).map(r => r.title), randomCovers: ROOMS.current?.randomColliders?.length || 0 }; },
   get enemyStates() { return activeEnemies.filter(e => e.alive).map(e => ({ state: e.state, alerted: e.alerted, ducking: e.ducking, cover: !!e.coverPoint, mag: e.mag, reload: e.reloading, burst: e.burstLeft, gap: +e.fireGapTimer.toFixed(2), los: e.hasLOS })); },
   get replayInfo() { return { mode: replay.mode, phase: replay.phase, level: replay.levelNumber, clips: levelReplayClips.map(c => ({ level: c.level, size: c.blob?.size || 0 })), queue: replay.finalQueue.length, recorder: !!replay.recorder, state: gameState, visible: !ui.replayScreen.classList.contains('hidden'), kicker: ui.replayKicker?.textContent || '' }; },
