@@ -1801,7 +1801,7 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Elite rifle unavailable; using simplified rifle.', error);
   }
   try {
-    assets.shotgunObject = await new OBJLoader().loadAsync('assets/models/Shotgun_ShortStock.obj');
+    assets.shotgunObject = await new OBJLoader().loadAsync('assets/models/Shotgun_NoStock.obj');
     const shades = { Black: 0x0b1118, DarkMetal: 0x1c2932, DarkWood: 0x49342d, Metal: 0x667985, Wood: 0x684439 };
     const mats = Object.fromEntries(Object.entries(shades).map(([name, color]) => [name,
       new THREE.MeshStandardMaterial({ color, metalness: name.includes('Metal') ? .45 : .1, roughness: .63, flatShading: true })
@@ -1845,7 +1845,7 @@ function buildShotgun() {
   const rig = new THREE.Group();
   camera.add(rig);
   const gun = new THREE.Group();
-  gun.position.set(.35, -.32, -.52);
+  gun.position.set(.37, -.34, -.22);
   gun.rotation.set(-.025, 0, .008);
   rig.add(gun);
   if (GAME_ASSETS.shotgunObject) {
