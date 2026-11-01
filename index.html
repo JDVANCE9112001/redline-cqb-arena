@@ -3036,7 +3036,7 @@ function groundHeightAt(x, z) {
   let height = 0;
   for (const c of colliders) {
     if (!c.walkable) continue;
-    if (x < c.minX - .10 || x > c.maxX + .10 || z < c.minZ - .10 || z > c.maxZ + .10) continue;
+    if (x < c.minX || x > c.maxX || z < c.minZ || z > c.maxZ) continue;
     if (c.top > height) height = c.top;
   }
   return height;
@@ -3322,17 +3322,23 @@ function addRoomBox(room, material, w, h, d, x, y, z, opts = {}) {
   if (opts.ry) mesh.rotation.y = opts.ry;
   mesh.castShadow = opts.cast ?? false;
   mesh.receiveShadow = opts.receive ?? true;
-  mesh.userData.ignoreRay = opts.ignoreRay ?? false;
+  const solid = opts.solid === true;
+  mesh.userData.ignoreRay = opts.ignoreRay ?? !solid;
   room.group.add(mesh);
-  if (opts.solid !== false) {
-    room.colliders.push({
-      minX: x - w / 2,
-      maxX: x + w / 2,
-      minZ: z - d / 2,
-      maxZ: z + d / 2,
+  if (solid) {
+    const angle = mesh.rotation.y;
+    const halfX = (Math.abs(Math.cos(angle)) * w + Math.abs(Math.sin(angle)) * d) / 2;
+    const halfZ = (Math.abs(Math.sin(angle)) * w + Math.abs(Math.cos(angle)) * d) / 2;
+    const collider = {
+      minX: x - halfX,
+      maxX: x + halfX,
+      minZ: z - halfZ,
+      maxZ: z + halfZ,
       top: y + h / 2,
       walkable: !!opts.walkable
-    });
+    };
+    room.colliders.push(collider);
+    mesh.userData.collider = collider;
   }
   return mesh;
 }
@@ -3407,26 +3413,69 @@ function roomFloorMedallion(room, x, z, radius = 1.3, color = 0xbcefff) {
 }
 
 function buildRoomShell(room, half) {
+  const windowed = room.name === 'WAREHOUSE';
   addRoomPlane(room, M.floor, half * 2, half * 2, 0, 0, 0, -Math.PI / 2, 0, { receive: true });
   addRoomPlane(room, M.porcelain, half * 2, half * 2, 0, 6, 0, Math.PI / 2, 0, { receive: true });
-  addRoomBox(room, M.porcelain, .42, 6, half * 2, -half, 3, 0, { solid: true, cast: true });
-  addRoomBox(room, M.porcelain, .42, 6, half * 2, half, 3, 0, { solid: true, cast: true });
+  if (windowed) {
+    const piers = [[-13.2, 3.6], [-4.5, 4.2], [4.5, 4.2], [13.2, 3.6]];
+    for (const side of [-1, 1]) {
+      const x = side * half;
+      addRoomBox(room, M.porcelain, .42, 1.35, half * 2, x, .675, 0, { solid: true, cast: true });
+      addRoomBox(room, M.porcelain, .42, 1.10, half * 2, x, 5.45, 0, { solid: true, cast: true });
+      for (const [z, width] of piers) {
+        addRoomBox(room, M.porcelain, .42, 3.55, width, x, 3.125, z, { solid: true, cast: true });
+      }
+    }
+  } else {
+    addRoomBox(room, M.porcelain, .42, 6, half * 2, -half, 3, 0, { solid: true, cast: true });
+    addRoomBox(room, M.porcelain, .42, 6, half * 2, half, 3, 0, { solid: true, cast: true });
+  }
   addRoomBox(room, M.porcelain, half * 2, 6, .42, 0, 3, -half, { solid: true, cast: true });
   addRoomBox(room, M.porcelain, half * 2, 6, .42, 0, 3, half, { solid: true, cast: true });
 
-  // wall ribs, skirting and the wide Y2K blue band
-  for (const side of [-1, 1]) {
-    const x = side * (half - .25);
-    addRoomBox(room, M.wallInset, .10, 5.1, half * 2 - .8, x, 3, 0, { solid: false, receive: true });
-    addRoomBox(room, M.chrome, .08, .10, half * 2 - .8, side * (half - .33), .12, 0, { solid: false });
-    addRoomBox(room, M.bluePanel, .05, .62, half * 2 - .8, side * (half - .37), 3.85, 0, { solid: false, ignoreRay: true });
-    addRoomBox(room, M.chrome, .035, .035, half * 2 - .8, side * (half - .40), 4.19, 0, { solid: false, ignoreRay: true });
-    addRoomBox(room, M.cyan, .025, .035, half * 2 - .8, side * (half - .42), 4.18, 0, { solid: false, ignoreRay: true });
-    const neon = side < 0 ? M.cyan : M.pink;
-    addRoomBox(room, neon, .035, 4.3, .055, side * (half - .38), 3.1, -3.2, { solid: false, ignoreRay: true });
-    addGlow(room.group, side * (half - .48), 3.1, -3.2, 1.2, 6.2, side < 0 ? 0x62edff : 0xff66cd, .18);
-    for (let z = -half + 2.2; z < half - 1.4; z += 3.3) {
-      addRoomBox(room, M.chrome, .055, 4.85, .055, side * (half - .30), 2.9, z, { solid: false, ignoreRay: true });
+  // The warehouse gets real openings, glass and a distant sky view.
+  if (windowed) {
+    const vista = new THREE.MeshBasicMaterial({ map: skyTexture, side: THREE.DoubleSide, toneMapped: true, depthWrite: false });
+    for (const side of [-1, 1]) {
+      const innerX = side * (half - .27);
+      const ry = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+      addRoomPlane(room, vista, half * 2, 7.2, side * (half + 3.8), 3.1, 0, 0, ry, { receive: false, ignoreRay: true });
+      addRoomBox(room, M.wallInset, .10, 1.14, half * 2 - .8, innerX, .67, 0, { solid: false, ignoreRay: true });
+      addRoomBox(room, M.wallInset, .10, .94, half * 2 - .8, innerX, 5.45, 0, { solid: false, ignoreRay: true });
+      addRoomBox(room, M.bluePanel, .06, .48, half * 2 - .8, side * (half - .33), 5.27, 0, { solid: false, ignoreRay: true });
+      addRoomBox(room, M.chrome, .08, .10, half * 2 - .8, side * (half - .36), .15, 0, { solid: false, ignoreRay: true });
+      for (const [z, width] of [[-13.2, 3.6], [-4.5, 4.2], [4.5, 4.2], [13.2, 3.6]]) {
+        addRoomBox(room, M.wallInset, .10, 3.48, width - .10, innerX, 3.125, z, { solid: false, ignoreRay: true });
+      }
+      for (const z of [-9, 0, 9]) {
+        addRoomPlane(room, M.glassBlue, 4.85, 3.48, side * (half - .31), 3.125, z, 0, ry, { receive: false, ignoreRay: true });
+        for (const edge of [-2.46, 2.46]) {
+          addRoomBox(room, M.chrome, .08, 3.55, .08, side * (half - .42), 3.125, z + edge, { solid: false, ignoreRay: true });
+        }
+        for (const y of [1.36, 4.88]) {
+          addRoomBox(room, M.chrome, .08, .07, 4.95, side * (half - .42), y, z, { solid: false, ignoreRay: true });
+        }
+        addRoomBox(room, side < 0 ? M.cyan : M.pink, .04, .035, 4.65, side * (half - .46), 4.78, z, { solid: false, ignoreRay: true });
+      }
+      for (const z of [-10.8, -1.8, 7.2]) {
+        addRoomBox(room, M.pale, .38, 2.0, 1.15, side * (half + 2.2), 1.0, z, { solid: false, ignoreRay: true });
+      }
+    }
+  } else {
+    // wall ribs, skirting and the wide Y2K blue band
+    for (const side of [-1, 1]) {
+      const x = side * (half - .25);
+      addRoomBox(room, M.wallInset, .10, 5.1, half * 2 - .8, x, 3, 0, { solid: false, receive: true });
+      addRoomBox(room, M.chrome, .08, .10, half * 2 - .8, side * (half - .33), .12, 0, { solid: false });
+      addRoomBox(room, M.bluePanel, .05, .62, half * 2 - .8, side * (half - .37), 3.85, 0, { solid: false, ignoreRay: true });
+      addRoomBox(room, M.chrome, .035, .035, half * 2 - .8, side * (half - .40), 4.19, 0, { solid: false, ignoreRay: true });
+      addRoomBox(room, M.cyan, .025, .035, half * 2 - .8, side * (half - .42), 4.18, 0, { solid: false, ignoreRay: true });
+      const neon = side < 0 ? M.cyan : M.pink;
+      addRoomBox(room, neon, .035, 4.3, .055, side * (half - .38), 3.1, -3.2, { solid: false, ignoreRay: true });
+      addGlow(room.group, side * (half - .48), 3.1, -3.2, 1.2, 6.2, side < 0 ? 0x62edff : 0xff66cd, .18);
+      for (let z = -half + 2.2; z < half - 1.4; z += 3.3) {
+        addRoomBox(room, M.chrome, .055, 4.85, .055, side * (half - .30), 2.9, z, { solid: false, ignoreRay: true });
+      }
     }
   }
   addRoomBox(room, M.wallInset, half * 2 - .8, 5.1, .10, 0, 3, -(half - .25), { solid: false, receive: true });
@@ -3561,6 +3610,7 @@ function buildCombatRoom() {
 
 function makeArenaRoom(groupName, title, level) {
   const half = groupName === 'WAREHOUSE' ? 15 : 12;
+  const playerLimit = half - .21 - MAP.playerR;
   const room = {
     name: groupName,
     title,
@@ -3571,7 +3621,7 @@ function makeArenaRoom(groupName, title, level) {
     randomColliders: [],
     randomGroup: null,
     randomSpots: [],
-    bounds: { minX: -half + .75, maxX: half - .75, minZ: -half + .75, maxZ: half - .75 },
+    bounds: { minX: -playerLimit, maxX: playerLimit, minZ: -playerLimit, maxZ: playerLimit },
     spawn: new THREE.Vector3(0, 1.72, half - 3.2),
     yaw: 0
   };
@@ -3611,11 +3661,6 @@ function buildWarehouseRoom() {
       }
       addRoomBox(room, M.cyan, .035, 3.0, .05, x - side * .50, 1.68, z - 1.53, { solid: false, ignoreRay: true });
     }
-    addRoomPlane(room, M.glassBlue, 6.4, 2.25, side * 14.61, 2.45, -4.0, 0, side < 0 ? Math.PI / 2 : -Math.PI / 2, { receive: false, ignoreRay: true });
-    for (const z of [-7.25, -.75]) {
-      addRoomBox(room, M.chrome, .08, 2.4, .08, side * 14.5, 2.45, z, { solid: false, ignoreRay: true });
-    }
-    addRoomBox(room, M.cyan, .06, .035, 6.5, side * 14.48, 3.63, -4.0, { solid: false, ignoreRay: true });
   }
 
   // Offset cover creates short fights without closing the long sight lines.
