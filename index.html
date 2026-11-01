@@ -78,7 +78,7 @@ for(const [x,z] of [[-5,0],[5,0],[0,-5],[0,5]]){box(x,1.4,z,.22,2.8,.22,mats.dar
 // Clean black floor lines and soft neutral light replace the desert palette.
 for(const z of [-15,-8,0,8,15])box(0,.012,z,31,.018,.035,mats.stone,false);for(const x of [-15,-8,0,8,15])box(x,.013,0,.035,.018,31,mats.stone,false);
 const lampMat=new THREE.MeshBasicMaterial({color:0xffffff});for(const [x,z] of [[-8,0],[8,0],[0,-8],[0,8],[0,0]]){box(x,4.55,z,.55,.08,.55,lampMat,false);const lamp=new THREE.PointLight(0xffffff,1.1,11,2);lamp.position.set(x*MAP_SCALE,4.25,z*MAP_SCALE);scene.add(lamp)}
-const player={x:0,z:12*MAP_SCALE,yaw:0,pitch:0,vel:new THREE.Vector3(),health:5};let enemies=[],shots=[],enemyShots=[],particles=[],deathEffects=[],kills=0,wave=1,running=false,paused=false,last=performance.now(),fireCD=0,spawnTimer=0,timeFactor=.08,gunKick=0,flashTime=0,hitPause=0,shotAction=0,mouseHeld=false;
+const player={x:0,z:10*MAP_SCALE,yaw:0,pitch:0,vel:new THREE.Vector3(),health:5};let enemies=[],shots=[],enemyShots=[],particles=[],deathEffects=[],kills=0,wave=1,running=false,paused=false,last=performance.now(),fireCD=0,spawnTimer=0,timeFactor=.08,gunKick=0,flashTime=0,hitPause=0,shotAction=0,mouseHeld=false;
 let audioCtx=null,sfxBus=null,musicEnabled=true;
 const deagleShot=new Audio('./assets/deagle-shot-sounds-from-csgo.mp3');deagleShot.preload='auto';deagleShot.volume=.38;
 const enemyShotSample=new Audio('./assets/the-sound-of-a-shot-from-m4a1.mp3');enemyShotSample.preload='auto';enemyShotSample.volume=.4;
