@@ -1801,7 +1801,7 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Elite rifle unavailable; using simplified rifle.', error);
   }
   try {
-    assets.shotgunObject = await new OBJLoader().loadAsync('assets/models/Shotgun_2.obj');
+    assets.shotgunObject = await new OBJLoader().loadAsync('assets/models/Shotgun_ShortStock.obj');
     const shades = { Black: 0x0b1118, DarkMetal: 0x1c2932, DarkWood: 0x49342d, Metal: 0x667985, Wood: 0x684439 };
     const mats = Object.fromEntries(Object.entries(shades).map(([name, color]) => [name,
       new THREE.MeshStandardMaterial({ color, metalness: name.includes('Metal') ? .45 : .1, roughness: .63, flatShading: true })
@@ -1850,7 +1850,7 @@ function buildShotgun() {
   rig.add(gun);
   if (GAME_ASSETS.shotgunObject) {
     const model = GAME_ASSETS.shotgunObject.clone(true);
-    model.scale.setScalar(.17);
+    model.scale.setScalar(.19);
     model.rotation.y = Math.PI / 2;
     gun.add(model);
   } else {
@@ -1858,12 +1858,12 @@ function buildShotgun() {
     const wood = new THREE.MeshStandardMaterial({ color: 0x54362b, roughness: .85 });
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(.09, .08, .75), dark);
     barrel.position.z = -.37;
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(.14, .16, .38), wood);
-    stock.position.set(0, -.065, .19);
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(.14, .16, .18), wood);
+    stock.position.set(0, -.065, .08);
     gun.add(barrel, stock);
   }
   const muzzleAnchor = new THREE.Object3D();
-  muzzleAnchor.position.set(0, .015, -.75);
+  muzzleAnchor.position.set(0, .015, -.79);
   gun.add(muzzleAnchor);
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd5a6, transparent: true, opacity: .95, depthWrite: false, side: THREE.DoubleSide });
   const flashGroup = new THREE.Mesh(new THREE.PlaneGeometry(.24, .24), flashMat);
@@ -2418,8 +2418,8 @@ class Enemy {
     const baseAttrs = enemyAttrs();
     this.attrs = elite ? {
       ...baseAttrs,
-      accuracy: Math.min(.9, baseAttrs.accuracy + .10),
-      fireGap: baseAttrs.fireGap * .78,
+      accuracy: Math.min(.9, baseAttrs.accuracy + (campaign.level <= 4 ? .06 : .10)),
+      fireGap: baseAttrs.fireGap * (campaign.level <= 4 ? .86 : .78),
       mag: baseAttrs.mag + 6,
       reload: baseAttrs.reload * .86
     } : baseAttrs;
@@ -2442,7 +2442,7 @@ class Enemy {
     this.mag = this.attrs.mag;
     this.burstLeft = 0;
     this.burstTimer = 0;
-    this.fireGapTimer = rand(.35, .8);
+    this.fireGapTimer = rand(.35, .8) + (campaign.level <= 4 ? .25 : 0);
     this.crouch = 0;
     this.hasLOS = false;
     this.losLostTimer = 0;
@@ -2837,7 +2837,7 @@ class Enemy {
   }
 
   startBurst() {
-    this.burstLeft = this.elite ? randInt(3, 4) : randInt(2, 3);
+    this.burstLeft = this.elite ? randInt(campaign.level <= 4 ? 2 : 3, campaign.level <= 4 ? 3 : 4) : randInt(2, 3);
     this.burstTimer = this.elite ? .035 : .045;
     this.ducking = false;
   }
@@ -3478,10 +3478,10 @@ const LEVEL_COUNTS = [null, [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 
 // Stage 3 enemy tuning. 7A: burst gap 1.0 s -> 0.6 s, 2-3 rounds at .12 s.
 const ENEMY_LEVELS = [
   null,
-  { detect: 13, reaction: 1.00, accuracy: .28, speed: 1.00, patrol: .46, preferred: 7.4, fireGap: 1.00, hide: .72, mag: 6, reload: 2.9, peek: .62 },
-  { detect: 15, reaction: .82, accuracy: .40, speed: 1.12, patrol: .52, preferred: 7.1, fireGap: .90, hide: .62, mag: 7, reload: 2.6, peek: .60 },
-  { detect: 17, reaction: .65, accuracy: .52, speed: 1.24, patrol: .58, preferred: 6.8, fireGap: .80, hide: .54, mag: 8, reload: 2.3, peek: .58 },
-  { detect: 19, reaction: .50, accuracy: .64, speed: 1.38, patrol: .64, preferred: 6.4, fireGap: .70, hide: .46, mag: 9, reload: 2.0, peek: .56 },
+  { detect: 13, reaction: 1.15, accuracy: .20, speed: 1.00, patrol: .46, preferred: 7.4, fireGap: 1.30, hide: .72, mag: 6, reload: 2.9, peek: .62 },
+  { detect: 15, reaction: .96, accuracy: .30, speed: 1.12, patrol: .52, preferred: 7.1, fireGap: 1.18, hide: .62, mag: 7, reload: 2.6, peek: .60 },
+  { detect: 17, reaction: .78, accuracy: .40, speed: 1.24, patrol: .58, preferred: 6.8, fireGap: 1.05, hide: .54, mag: 8, reload: 2.3, peek: .58 },
+  { detect: 19, reaction: .62, accuracy: .50, speed: 1.38, patrol: .64, preferred: 6.4, fireGap: .91, hide: .46, mag: 9, reload: 2.0, peek: .56 },
   { detect: 22, reaction: .34, accuracy: .76, speed: 1.52, patrol: .70, preferred: 6.0, fireGap: .60, hide: .38, mag: 10, reload: 1.7, peek: .54 }
 ];
 let transitionTimer = 0;
@@ -5959,9 +5959,9 @@ function shoot() {
   shotStreak = Math.min(5, shotStreak + 1);
   lastShotSim = runElapsed;
 
-  recoilPitch = Math.min(.16, recoilPitch + rand(.028, .038));
-  recoilYaw += rand(-.012, .012);
-  recoilHold = .12;
+  recoilPitch = Math.min(.095, recoilPitch + rand(.014, .020));
+  recoilYaw += rand(-.006, .006);
+  recoilHold = .08;
   ui.crosshair.style.transform = 'translate(-50%,-50%) scale(1.18)';
   setTimeout(() => { ui.crosshair.style.transform = 'translate(-50%,-50%) scale(1)'; }, 80);
 }
@@ -6653,7 +6653,7 @@ function updateWeapon(dt) {
   const recoilDt = dt * Math.max(timeFlow, .001);
   w.recoil = damp(w.recoil, 0, 8.5, recoilDt);
   w.slideKick = damp(w.slideKick, 0, 18, recoilDt);
-  w.slideGroup.position.z = w.slideBaseZ + w.slideKick * .034;
+  w.slideGroup.position.z = w.slideBaseZ + w.slideKick * .025;
   w.flashTimer = Math.max(0, w.flashTimer - dt * Math.max(timeFlow, .001));
   w.flashGroup.visible = w.flashTimer > 0;
   if (w.flashTimer > 0) {
@@ -6671,8 +6671,8 @@ function updateWeapon(dt) {
   const aimY = w.gun.position.y;
   w.gun.position.x = damp(aimX, w.base.x + swayX, 9, dt);
   w.gun.position.y = damp(aimY, w.base.y + swayY + bobY, 9, dt);
-  w.gun.position.z = w.base.z + w.recoil * .145 + bobX;
-  w.gun.rotation.x = w.baseRot.x + w.recoil * .24 + swayY * .9;
+  w.gun.position.z = w.base.z + w.recoil * .085 + bobX;
+  w.gun.rotation.x = w.baseRot.x + w.recoil * .13 + swayY * .9;
   w.gun.rotation.y = w.baseRot.y + swayX * 2.5;
   w.gun.rotation.z = w.baseRot.z - swayX * .8 + Math.sin(w.bob * .5) * .003;
   if (shotgunView) {
