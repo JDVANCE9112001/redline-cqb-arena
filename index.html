@@ -2985,7 +2985,7 @@ function findCoverForEnemy(enemy, playerPos) {
     const off = Math.max(w, d) * .5 + .62;
     const hx = cx + (dx / len) * off;
     const hz = cz + (dz / len) * off;
-    if (hx < -11.0 || hx > 11.0 || hz < -11.0 || hz > 11.0) continue;
+    if (hx < MAP.bounds.minX + .25 || hx > MAP.bounds.maxX - .25 || hz < MAP.bounds.minZ + .25 || hz > MAP.bounds.maxZ - .25) continue;
     if (collidesCircle(hx, hz, .38)) continue;
     if (!segmentHitsRect(playerPos.x, playerPos.z, hx, hz, c, .03)) continue;
     if (!lineBlockedByCover(playerPos.x, playerPos.z, hx, hz)) continue;
@@ -2995,7 +2995,7 @@ function findCoverForEnemy(enemy, playerPos) {
     for (const side of [1, -1]) {
       const px = hx + perpX * side * peekOffset;
       const pz = hz + perpZ * side * peekOffset;
-      if (px < -11.0 || px > 11.0 || pz < -11.0 || pz > 11.0) continue;
+      if (px < MAP.bounds.minX + .25 || px > MAP.bounds.maxX - .25 || pz < MAP.bounds.minZ + .25 || pz > MAP.bounds.maxZ - .25) continue;
       if (collidesCircle(px, pz, .34)) continue;
       if (lineBlockedByCover(playerPos.x, playerPos.z, px, pz)) continue;
       peek = { x: px, z: pz };
@@ -3003,9 +3003,9 @@ function findCoverForEnemy(enemy, playerPos) {
     }
     if (!peek) continue;
     const dp = Math.hypot(hx - playerPos.x, hz - playerPos.z);
-    if (dp < 3.2 || dp > 14) continue;
+    if (dp < 3.2 || dp > 17) continue;
     const de = Math.hypot(hx - enemy.group.position.x, hz - enemy.group.position.z);
-    if (de > 13) continue;
+    if (de > 16) continue;
     const score = Math.abs(dp - 6.8) * 1.25 + de * .18 - (c.top > 1.4 ? .35 : 0);
     if (score < bestScore) {
       bestScore = score;
@@ -3156,9 +3156,11 @@ function defeatEnemy(enemy, hitPoint, normal = null) {
 }
 
 function spawnEnemies(count = 1) {
+  const bounds = ROOMS.current?.bounds || MAP.bounds;
   const candidates = [
-    [-8.3, 4.8], [8.3, 4.4], [-8.7, -1.2], [8.7, -2.0],
-    [-6.0, -7.2], [6.2, -7.3], [0.0, -7.8], [-3.8, 2.1], [3.9, 1.0]
+    [-12.8, 9.2], [12.8, 9.2], [-12.8, 1.8], [12.8, 1.8],
+    [-12.8, -6.4], [12.8, -6.4], [-8.0, -12.2], [8.0, -12.2],
+    [0, -12.1], [-6.0, 8.7], [6.0, 8.7], [-4.6, -5.6], [4.6, -4.0]
   ];
   for (let i = candidates.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -3167,15 +3169,15 @@ function spawnEnemies(count = 1) {
   const chosen = [];
   for (const [x, z] of candidates) {
     if (chosen.length >= count) break;
-    if (Math.hypot(x - player.position.x, z - player.position.z) < 3.8) continue;
+    if (Math.hypot(x - player.position.x, z - player.position.z) < 5.0) continue;
     if (collidesCircle(x, z, .32)) continue;
     chosen.push([x, z]);
   }
   let attempts = 0;
   while (chosen.length < count && attempts++ < 80) {
-    const x = rand(-9.8, 9.8);
-    const z = rand(-9.2, 6.8);
-    if (Math.hypot(x - player.position.x, z - player.position.z) < 3.8) continue;
+    const x = rand(bounds.minX + 1, bounds.maxX - 1);
+    const z = rand(bounds.minZ + 1, bounds.maxZ - 1);
+    if (Math.hypot(x - player.position.x, z - player.position.z) < 5.0) continue;
     if (collidesCircle(x, z, .32)) continue;
     if (chosen.some(([cx, cz]) => Math.hypot(cx - x, cz - z) < 1.4)) continue;
     chosen.push([x, z]);
@@ -3558,7 +3560,7 @@ function buildCombatRoom() {
 }
 
 function makeArenaRoom(groupName, title, level) {
-  const half = 12;
+  const half = groupName === 'WAREHOUSE' ? 15 : 12;
   const room = {
     name: groupName,
     title,
@@ -3569,8 +3571,8 @@ function makeArenaRoom(groupName, title, level) {
     randomColliders: [],
     randomGroup: null,
     randomSpots: [],
-    bounds: { minX: -11.25, maxX: 11.25, minZ: -11.25, maxZ: 11.25 },
-    spawn: new THREE.Vector3(0, 1.72, 9.6),
+    bounds: { minX: -half + .75, maxX: half - .75, minZ: -half + .75, maxZ: half - .75 },
+    spawn: new THREE.Vector3(0, 1.72, half - 3.2),
     yaw: 0
   };
   room.group.name = 'ROOM_' + groupName;
@@ -3581,16 +3583,23 @@ function makeArenaRoom(groupName, title, level) {
 
 function buildWarehouseRoom() {
   const room = makeArenaRoom('WAREHOUSE', 'WAREHOUSE', 2);
-  room.randomSpots = [[-8.2, 5.2], [8.2, 5.2], [-8.4, .8], [8.4, .4], [-3.2, 4.2], [3.4, 3.2], [-3.6, -1.2], [3.8, -2.0]];
-  addRoomPlane(room, M.pathEdge, 2.6, 19, 0, .016, 0, -Math.PI / 2, 0, { receive: true });
-  addRoomPlane(room, M.path, 1.9, 18.2, 0, .022, 0, -Math.PI / 2, 0, { receive: true });
-  for (let z = -9.2; z < 3.8; z += 3.2) {
-    addRoomBox(room, M.pale, 2.9, .055, .035, 0, .04, z, { solid: false, ignoreRay: true });
-    addRoomBox(room, M.darkMetal, 2.55, .012, .022, 0, .06, z, { solid: false, ignoreRay: true });
+  room.randomSpots = [[-7.2, 9.0], [7.2, 9.0], [-5.3, 2.7], [5.3, 2.0], [-7.0, -7.2], [7.0, -8.2], [-3.1, -5.5], [3.1, -6.0], [-12.7, 7.2], [12.7, -2.0]];
+
+  // The blue spine and two cross lanes keep the larger arena easy to read.
+  addRoomPlane(room, M.pathEdge, 3.1, 27.2, 0, .016, 0, -Math.PI / 2, 0, { receive: true });
+  addRoomPlane(room, M.path, 2.35, 26.6, 0, .022, 0, -Math.PI / 2, 0, { receive: true });
+  for (const z of [-7.0, 4.9]) {
+    addRoomPlane(room, M.pathEdge, 26.0, 1.55, 0, .017, z, -Math.PI / 2, 0, { receive: true });
+    addRoomPlane(room, M.path, 25.4, 1.08, 0, .023, z, -Math.PI / 2, 0, { receive: true });
   }
+  for (let z = -12; z <= 9; z += 3.5) {
+    addRoomBox(room, M.pale, 3.2, .045, .035, 0, .041, z, { solid: false, ignoreRay: true });
+  }
+
+  // Shelving stays near the walls, leaving a central arena and two continuous flank routes.
   for (const side of [-1, 1]) {
-    for (const z of [-7.4, -3.8, -.2, 3.4]) {
-      const x = side * 9.05;
+    for (const z of [-10.2, -5.0, .2, 5.4]) {
+      const x = side * 10.7;
       addRoomBox(room, M.porcelain, .95, 3.2, 3.0, x, 1.6, z, { solid: true, cast: true });
       for (let level = 0; level < 4; level++) {
         addRoomBox(room, M.chrome, .98, .075, 3.05, x, .45 + level * .82, z, { solid: false });
@@ -3602,16 +3611,32 @@ function buildWarehouseRoom() {
       }
       addRoomBox(room, M.cyan, .035, 3.0, .05, x - side * .50, 1.68, z - 1.53, { solid: false, ignoreRay: true });
     }
+    addRoomPlane(room, M.glassBlue, 6.4, 2.25, side * 14.61, 2.45, -4.0, 0, side < 0 ? Math.PI / 2 : -Math.PI / 2, { receive: false, ignoreRay: true });
+    for (const z of [-7.25, -.75]) {
+      addRoomBox(room, M.chrome, .08, 2.4, .08, side * 14.5, 2.45, z, { solid: false, ignoreRay: true });
+    }
+    addRoomBox(room, M.cyan, .06, .035, 6.5, side * 14.48, 3.63, -4.0, { solid: false, ignoreRay: true });
   }
-  for (const [x, z, w, d] of [[-6.0, 5.7, 2.2, 2.0], [6.1, -5.7, 2.5, 2.0], [-2.9, -8.3, 2.1, 1.8]]) {
-    addRoomBox(room, M.pale, w, .55, d, x, .275, z, { solid: true, cast: true });
-    addRoomBox(room, M.chrome, w + .05, .04, d + .05, x, .57, z, { solid: false });
-    addRoomBox(room, M.cyanSoft, w * .55, .014, .016, x, .61, z, { solid: false, ignoreRay: true });
+
+  // Offset cover creates short fights without closing the long sight lines.
+  const coverIslands = [
+    [-6.2, 7.3, 2.8, 1.1, 1.45], [6.5, 7.0, 2.8, 1.1, 1.45],
+    [-6.5, -1.9, 2.6, 1.2, 1.3], [6.3, -3.2, 2.7, 1.3, 1.5],
+    [-4.6, -9.4, 2.0, 1.5, .92], [4.7, -9.0, 2.2, 1.6, .95]
+  ];
+  for (const [x, z, w, d, h] of coverIslands) {
+    addRoomBox(room, M.pale, w, h, d, x, h / 2, z, { solid: true, cast: true });
+    addRoomBox(room, M.chrome, w + .06, .045, d + .06, x, h + .022, z, { solid: false, ignoreRay: true });
+    addRoomBox(room, M.cyanSoft, w * .62, .02, .025, x, h + .055, z - d / 2 - .02, { solid: false, ignoreRay: true });
   }
-  addStepPlatform(room, M.pale, 2.8, 2.3, .34, -8.2, 5.2);
-  addStepPlatform(room, M.pale, 2.4, 2.2, .34, 8.3, 5.0);
-  roomFloorMedallion(room, 0, 1.0, 1.6, 0xffe0a3);
-  addRoomSign(room, 'BAY 02', 'FORKLIFT LANE', 3.5, 1.2, -8.75, 2.9, 11.60, Math.PI, '#ffd06b');
+  addStepPlatform(room, M.pale, 2.7, 2.2, .34, -8.0, 10.5);
+  addStepPlatform(room, M.pale, 2.7, 2.2, .34, 8.0, 10.5);
+  for (const z of [-9.0, 0, 9.0]) {
+    addRoomBox(room, M.chrome, 25.5, .10, .12, 0, 5.42, z, { solid: false, ignoreRay: true });
+    addRoomBox(room, M.cyanSoft, 23.0, .025, .03, 0, 5.33, z, { solid: false, ignoreRay: true });
+  }
+  roomFloorMedallion(room, 0, .4, 2.0, 0xffe0a3);
+  addRoomSign(room, 'BAY 02', 'SURVIVAL ARENA', 4.1, 1.25, -9.5, 2.9, 14.61, Math.PI, '#ffd06b');
   room.group.visible = false;
   return room;
 }
@@ -3770,7 +3795,7 @@ function randomizeRoomCover(room) {
   let placed = 0;
   for (const [sx, sz] of spots) {
     if (placed >= count) break;
-    if (Math.hypot(sx, sz - 9.6) < 3.1) continue;
+    if (Math.hypot(sx - room.spawn.x, sz - room.spawn.z) < 3.1) continue;
     if (Math.abs(sx) < 2.2 && sz > 4.0) continue;
     if (!roomPointClear(room, sx, sz, 1.35)) continue;
     const low = placed === 0 || Math.random() < .3;
@@ -5951,7 +5976,7 @@ function updateThrownPistol(dt, flow) {
       finishThrownPistol(p.root.position);
       return;
     }
-    if (p.age > 8 || p.root.position.z < MAP.bounds.minZ - 2 || p.root.position.z > MAP.bounds.maxZ + 3 || Math.abs(p.root.position.x) > 12.5) {
+    if (p.age > 8 || p.root.position.z < MAP.bounds.minZ - 2 || p.root.position.z > MAP.bounds.maxZ + 3 || p.root.position.x < MAP.bounds.minX - 2 || p.root.position.x > MAP.bounds.maxX + 2) {
       finishThrownPistol(p.root.position);
       return;
     }
