@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23b7192c'/%3E%3C/svg%3E">
 <title>RED SHIFT · 新地图测试版</title>
 <style>
-*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#e9ecea;color:#17201f;font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif}canvas{display:block;width:100%;height:100%}#panel{position:fixed;z-index:2;top:18px;left:18px;width:min(390px,calc(100vw - 36px));padding:17px 18px 14px;background:rgba(249,250,248,.93);border:1px solid #cbd0ce;box-shadow:0 8px 36px #24302a26;backdrop-filter:blur(10px)}h1{font-size:15px;letter-spacing:.16em;margin:0 0 3px}small{display:block;color:#6c7773;letter-spacing:.08em;font-size:10px}#stats{margin:13px 0 11px;color:#36413d;font-size:12px}#controls{display:flex;flex-wrap:wrap;gap:7px}button{border:1px solid #bfc6c2;background:#fff;color:#18211e;padding:7px 10px;cursor:pointer;font:inherit;font-size:11px}button:hover,button.on{background:#b7192c;color:#fff;border-color:#b7192c}#tip{margin-top:12px;color:#65716c;font-size:11px}.tag{position:fixed;right:18px;top:18px;background:#b7192c;color:white;padding:7px 11px;font-size:10px;letter-spacing:.12em;z-index:2}#error{position:fixed;inset:auto 18px 18px;display:none;padding:12px;background:#4d1018;color:#fff;white-space:pre-wrap;z-index:4}
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#e9ecea;color:#17201f;font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif}canvas{display:block;width:100%;height:100%}#panel{position:fixed;z-index:2;top:18px;left:18px;width:min(390px,calc(100vw - 36px));padding:17px 18px 14px;background:rgba(249,250,248,.93);border:1px solid #cbd0ce;box-shadow:0 8px 36px #24302a26;backdrop-filter:blur(10px)}h1{font-size:15px;letter-spacing:.16em;margin:0 0 3px}small{display:block;color:#6c7773;letter-spacing:.08em;font-size:10px}#stats{margin:13px 0 11px;color:#36413d;font-size:12px}#controls{display:flex;flex-wrap:wrap;gap:7px}button{border:1px solid #bfc6c2;background:#fff;color:#18211e;padding:7px 10px;cursor:pointer;font:inherit;font-size:11px}button:hover,button.on{background:#b7192c;color:#fff;border-color:#b7192c}#tip{margin-top:12px;color:#65716c;font-size:11px}.tag{position:fixed;right:18px;top:18px;background:#b7192c;color:white;padding:7px 11px;font-size:10px;letter-spacing:.12em;z-index:2}#error{position:fixed;inset:auto 18px 18px;display:none;padding:12px;background:#4d1018;color:#fff;white-space:pre-wrap;z-index:4}.legend{display:flex;flex-wrap:wrap;gap:7px 13px;margin-top:10px;color:#65716c;font-size:10px}.legend span{display:flex;align-items:center;gap:5px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%}
 </style>
 </head>
 <body>
@@ -20,6 +20,7 @@
     <button id="spawns">敌人出生点</button><button id="nav">导航网格</button>
     <button id="first">第一人称查看</button>
   </div>
+  <div class="legend"><span><i style="background:#bd202f"></i>客厅</span><span><i style="background:#d49333"></i>餐厅</span><span><i style="background:#4f9c8a"></i>厨房</span><span><i style="background:#816ab6"></i>卧室</span><span><i style="background:#3e7eaa"></i>书房</span></div>
   <div id="tip">鼠标拖动旋转 · 滚轮缩放 · WASD 平移。第一人称模式下 WASD 移动，拖动鼠标转向。</div>
 </div>
 <div class="tag">TEST ONLY · 不影响正式游戏</div>
@@ -81,8 +82,9 @@ for(const c of map.colliders){
   const edge=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0xd51d36,transparent:true,opacity:.82}));
   edge.position.set((c.minX+c.maxX)/2,(c.bottom+c.top)/2,(c.minZ+c.maxZ)/2); colliderGroup.add(edge);
 }
+const spawnColors={living:0xbd202f,dining:0xd49333,kitchen:0x4f9c8a,bedroom:0x816ab6,study:0x3e7eaa,foyer:0xb7192c};
 for(const p of map.enemySpawns){
-  const marker=new THREE.Mesh(new THREE.OctahedronGeometry(.20,0),new THREE.MeshBasicMaterial({color:0xb7192c}));
+  const marker=new THREE.Mesh(new THREE.OctahedronGeometry(.20,0),new THREE.MeshBasicMaterial({color:spawnColors[p.room]??0xb7192c}));
   marker.position.set(p.x,.34,p.z); spawnGroup.add(marker);
 }
 colliderGroup.visible=collisionVisible; spawnGroup.visible=spawnVisible;
@@ -97,7 +99,7 @@ function buildNav(){
   navPoints.visible=navVisible; scene.add(navPoints);
 }
 buildNav();
-document.querySelector('#stats').textContent=`房屋范围 34 × 32 m · 出生点 ${map.enemySpawns.length} 个 · 碰撞箱 ${map.colliders.length} 个 · 导航 ${map.navGrid.width} × ${map.navGrid.height}`;
+document.querySelector('#stats').textContent=`房屋范围 36 × 34 m · 出生点 ${map.enemySpawns.length} 个 · 碰撞箱 ${map.colliders.length} 个 · 导航 ${map.navGrid.width} × ${map.navGrid.height}`;
 
 let target=new THREE.Vector3(0,1.0,0), radius=44, theta=.72, phi=.88, yaw=0, pitch=0;
 const spawn=map.playerSpawn;

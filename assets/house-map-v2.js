@@ -2,9 +2,9 @@
 // from combat code so the layout can be reviewed before it replaces the current map.
 export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLight, roomsRoot, skyTexture }) {
   const room = {
-    name: 'HOUSE_V2', title: 'THE OPEN HOUSE', level: 1, half: 17,
+    name: 'HOUSE_V2', title: 'THE OPEN HOUSE', level: 1, half: 18,
     group: new THREE.Group(), colliders: [], randomColliders: [], randomSpots: [],
-    bounds: { minX: -16.55, maxX: 16.55, minZ: -15.55, maxZ: 15.55 },
+    bounds: { minX: -17.55, maxX: 17.55, minZ: -16.55, maxZ: 16.55 },
     spawn: new THREE.Vector3(0, 1.72, 13.2), yaw: 0
   };
   room.group.name = 'ROOM_HOUSE_V2';
@@ -14,61 +14,65 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
     wall: new THREE.MeshStandardMaterial({ color: 0xe7e9e7, roughness: .84 }),
     trim: new THREE.MeshStandardMaterial({ color: 0xc9cecc, roughness: .78 }),
     floor: new THREE.MeshStandardMaterial({ color: 0xb8bfbd, roughness: .93 }),
+    livingFloor: new THREE.MeshStandardMaterial({ color: 0xc8cfcc, roughness: .96 }),
+    diningFloor: new THREE.MeshStandardMaterial({ color: 0xd2cec4, roughness: .96 }),
+    kitchenFloor: new THREE.MeshStandardMaterial({ color: 0xc2ccca, roughness: .94 }),
+    bedroomFloor: new THREE.MeshStandardMaterial({ color: 0xd0ccc5, roughness: .97 }),
+    studyFloor: new THREE.MeshStandardMaterial({ color: 0xc3cbce, roughness: .96 }),
     wood: new THREE.MeshStandardMaterial({ color: 0x9b8f7e, roughness: .82 }),
     fabric: new THREE.MeshStandardMaterial({ color: 0xaab6b5, roughness: .95 }),
     light: new THREE.MeshStandardMaterial({ color: 0xf9f9f5, roughness: .92 }),
     red: new THREE.MeshStandardMaterial({ color: 0xb9162b, roughness: .72 }),
-    black: new THREE.MeshStandardMaterial({ color: 0x343b3b, roughness: .68 }),
     glass: new THREE.MeshPhysicalMaterial({ color: 0xd9eef1, transparent: true, opacity: .28, depthWrite: false, roughness: .12, side: THREE.DoubleSide })
   };
   const box = (m, w, h, d, x, y, z, opts = {}) => addRoomBox(room, m, w, h, d, x, y, z, opts);
-  const solid = (m, w, h, d, x, y, z, opts = {}) => box(m, w, h, d, x, y, z, { solid: true, cast: true, ...opts });
+  const solid = (m, w, h, d, x, y, z, opts = {}) => box(m, w, h, d, x, y, z, { solid: true, cast: Math.max(w, h, d) >= 1.2, ...opts });
   const floor = (w, d, x, z, m = mat.floor) => box(m, w, .035, d, x, .018, z, { ignoreRay: true });
   const wallX = (x, z1, z2) => solid(mat.wall, .28, 4.55, z2 - z1, x, 2.275, (z1 + z2) / 2);
   const wallZ = (z, x1, x2) => solid(mat.wall, x2 - x1, 4.55, .28, (x1 + x2) / 2, 2.275, z);
 
   // Floors stay open to the sky in the viewer so the whole plan is readable.
-  addRoomPlane(room, mat.floor, 34, 32, 0, 0, 0, -Math.PI / 2);
-  floor(9.2, 10.4, 0, 9.0, mat.trim);
-  floor(9.5, 8.4, 10.3, 7.0, mat.trim);
-  floor(9.2, 7.6, 10.3, -8.0, mat.trim);
-  floor(9.4, 8.0, -10.8, -10.6, mat.trim);
-  floor(9.4, 7.4, -10.8, -.8, mat.trim);
+  addRoomPlane(room, mat.floor, 36, 34, 0, 0, 0, -Math.PI / 2);
+  floor(9.2, 10.4, 0, 9.0, mat.livingFloor);
+  floor(9.5, 8.4, 10.3, 7.0, mat.diningFloor);
+  floor(9.2, 7.6, 10.3, -8.0, mat.kitchenFloor);
+  floor(9.4, 8.0, -10.8, -10.6, mat.bedroomFloor);
+  floor(9.4, 7.4, -10.8, -.8, mat.studyFloor);
 
   // Exterior shell: long window openings with glass, plus a centered entry door.
-  solid(mat.wall, 34, .55, .3, 0, .275, -15.85);
-  solid(mat.wall, 15.2, .55, .3, -9.4, .275, 15.85);
-  solid(mat.wall, 15.2, .55, .3, 9.4, .275, 15.85);
-  solid(mat.wall, 34, .72, .3, 0, 4.22, -15.85);
-  solid(mat.wall, 34, .72, .3, 0, 4.22, 15.85);
+  solid(mat.wall, 36, .55, .3, 0, .275, -16.85);
+  solid(mat.wall, 16.2, .55, .3, -9.9, .275, 16.85);
+  solid(mat.wall, 16.2, .55, .3, 9.9, .275, 16.85);
+  solid(mat.wall, 36, .72, .3, 0, 4.22, -16.85);
+  solid(mat.wall, 36, .72, .3, 0, 4.22, 16.85);
   for (const x of [-14.5, -9.0, -3.5, 3.5, 9.0, 14.5]) {
-    solid(mat.wall, .34, 2.95, .36, x, 2.15, -15.85);
-    solid(mat.wall, .34, 2.95, .36, x, 2.15, 15.85);
+    solid(mat.wall, .34, 2.95, .36, x, 2.15, -16.85);
+    solid(mat.wall, .34, 2.95, .36, x, 2.15, 16.85);
   }
   for (const x of [-11.75, -6.25, 0, 6.25, 11.75]) {
-    solid(mat.glass, 4.95, 2.78, .07, x, 2.15, -15.85, { cast: false });
-    if (Math.abs(x) > 2.5) solid(mat.glass, 4.95, 2.78, .07, x, 2.15, 15.85, { cast: false });
+    solid(mat.glass, 4.95, 2.78, .07, x, 2.15, -16.85, { cast: false });
+    if (Math.abs(x) > 2.5) solid(mat.glass, 4.95, 2.78, .07, x, 2.15, 16.85, { cast: false });
   }
   // Leave a front entry gap between the two center columns.
-  for (const x of [-1.8, 1.8]) solid(mat.wall, .34, 2.95, .36, x, 2.15, 15.85);
+  for (const x of [-1.8, 1.8]) solid(mat.wall, .34, 2.95, .36, x, 2.15, 16.85);
   // Correct the bottom/top strips across the door with trim, not a blocker.
-  box(mat.wood, 2.9, .08, .34, 0, 3.76, 15.85, { ignoreRay: true });
+  box(mat.wood, 2.9, .08, .34, 0, 3.76, 16.85, { ignoreRay: true });
   for (const side of [-1, 1]) {
-    solid(mat.wall, .3, .55, 32, side * 16.85, .275, 0);
-    solid(mat.wall, .3, .72, 32, side * 16.85, 4.22, 0);
+    solid(mat.wall, .3, .55, 34, side * 17.85, .275, 0);
+    solid(mat.wall, .3, .72, 34, side * 17.85, 4.22, 0);
     for (const z of [-13.4, -7.8, -2.2, 3.4, 9.0, 14.2])
-      solid(mat.wall, .34, 2.95, .38, side * 16.85, 2.15, z);
+      solid(mat.wall, .34, 2.95, .38, side * 17.85, 2.15, z);
     for (const z of [-10.6, -5.0, .6, 6.2, 11.8]) {
-      solid(mat.glass, .07, 2.78, 5.15, side * 16.85, 2.15, z, { cast: false });
-      box(mat.black, .08, .06, 5.15, side * 16.79, .72, z, { ignoreRay: true });
-      box(mat.black, .08, .06, 5.15, side * 16.79, 3.58, z, { ignoreRay: true });
+      solid(mat.glass, .07, 2.78, 5.15, side * 17.85, 2.15, z, { cast: false });
+      box(mat.trim, .08, .06, 5.15, side * 17.79, .72, z, { ignoreRay: true });
+      box(mat.trim, .08, .06, 5.15, side * 17.79, 3.58, z, { ignoreRay: true });
     }
     const sky = new THREE.MeshBasicMaterial({ map: skyTexture, side: THREE.DoubleSide, depthWrite: false });
-    addRoomPlane(room, sky, 30, 6, side * 19.4, 2.75, 0, 0, side < 0 ? Math.PI / 2 : -Math.PI / 2, { receive: false, ignoreRay: true });
+    addRoomPlane(room, sky, 32, 6, side * 20.4, 2.75, 0, 0, side < 0 ? Math.PI / 2 : -Math.PI / 2, { receive: false, ignoreRay: true });
   }
-  const door = box(mat.wood, 2.7, 2.86, .10, -1.35, 1.53, 14.5, { ignoreRay: true });
+  const door = box(mat.wood, 2.7, 2.86, .10, -1.35, 1.53, 15.5, { ignoreRay: true });
   door.rotation.y = Math.PI / 2;
-  box(mat.black, .09, .09, .07, -1.35, 1.48, 13.20, { ignoreRay: true });
+  box(mat.wood, .09, .09, .07, -1.35, 1.48, 14.2, { ignoreRay: true });
 
   // Interior partitions keep doors broad and preserve a loop around the central room.
   for (const [a, b] of [[-15.65, -11.6], [-8.6, -4.1], [-1.1, 4.3], [7.4, 11.5], [14.4, 15.65]]) wallX(-5.35, a, b);
@@ -76,6 +80,7 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   // Short wing dividers define study/bedroom and kitchen/dining without sealing them.
   wallZ(-5.8, -15.65, -12.4); wallZ(-5.8, -9.2, -5.35);
   wallZ(-1.6, 5.35, 8.0); wallZ(-1.6, 11.8, 15.65);
+  wallZ(5.8, -5.35, -1.35); wallZ(5.8, 1.35, 5.35);
   // Partial-height screens create CQB cover but keep sightlines through the house.
   solid(mat.trim, .22, 1.25, 3.4, -5.35, .625, 6.0);
   solid(mat.trim, .22, 1.25, 3.2, 5.35, .625, 5.9);
@@ -107,12 +112,12 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   // Central living room: open loop lanes around a landmark crate and layered furniture cover.
   sofa(-3.55, 10.5, 3.7, Math.PI / 2);
   table(-2.0, 7.8, 1.9, 1.05, .46);
-  solid(mat.wood, 2.9, 1.35, 1.35, 0, 3.5, 1.2, { cast: true });
-  box(mat.red, 2.35, .16, 1.42, 0, 4.26, 1.2, { ignoreRay: true });
+  solid(mat.wood, 2.9, 1.35, 1.35, 0, .675, 1.2, { cast: true });
+  box(mat.red, 2.35, .16, 1.42, 0, 1.38, 1.2, { ignoreRay: true });
   sofa(3.6, 10.1, 3.3, -Math.PI / 2);
   solid(mat.trim, 2.4, .72, .52, 4.5, .36, 8.0);
-  box(mat.black, 2.0, 1.15, .08, 4.5, 1.48, 7.7, { ignoreRay: true });
-  floor(6.8, 5.8, 0, 9.4, mat.trim);
+  // Keep the long sightline beside the console clear; the screen was visual-only.
+  floor(6.8, 5.8, 0, 9.4, mat.livingFloor);
   plant(-4.5, 13.6); plant(4.45, 13.6);
 
   // Dining and kitchen on the east side; the central island is waist-high cover.
@@ -139,11 +144,27 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   shelf(-15.0, 2.0, 1.35, 2.6); shelf(-6.3, -3.4, 1.25, 2.4);
 
   // Entrance hall and small landmarks help identify direction while testing.
-  table(0, 12.0, 2.5, .62, .68);
-  box(mat.red, .46, .9, .46, 0, 1.15, 11.8, { ignoreRay: true });
-  box(mat.black, 1.7, 1.0, .06, -3.5, 2.0, 12.8, { ignoreRay: true });
-  for (const [x, z, w] of [[-11, 6.0, 2.2], [10, 2.1, 2.2], [-10, -3.2, 1.8], [2.5, -11.4, 1.6]])
-    box(mat.black, w, .035, .055, x, 2.5, z, { ignoreRay: true });
+  table(-3.5, 12.0, 2.5, .62, .68);
+  box(mat.red, .46, .42, .46, -3.5, .95, 12.0, { ignoreRay: true });
+
+  // Waist-high room dividers break up exposed lanes but leave a path around
+  // each end, so every new piece works as cover without becoming a dead end.
+  const combatCover = (x, z, w, d, yaw = 0) => {
+    const frontX = x + Math.sin(yaw) * (d / 2 + .014);
+    const frontZ = z + Math.cos(yaw) * (d / 2 + .014);
+    solid(mat.trim, w, .98, d, x, .49, z, { ry: yaw, cast: true });
+    solid(mat.wood, w * .88, .12, d + .025, x, .20, z, { ry: yaw, cast: true });
+    box(mat.red, w * .58, .035, .024, frontX, .69, frontZ, { ry: yaw, ignoreRay: true });
+    box(mat.chrome, w + .08, .035, d + .08, x, 1.01, z, { ry: yaw, ignoreRay: true });
+  };
+  combatCover(-3.05, 3.65, 1.75, .58);
+  combatCover(3.05, 3.65, 1.75, .58);
+  combatCover(12.8, 3.3, 1.9, .60);
+  combatCover(12.45, -7.4, 1.75, .58);
+  combatCover(-13.25, -3.4, 1.8, .58, Math.PI / 2);
+  combatCover(7.0, 11.7, 1.6, .54);
+  combatCover(-13.1, -7.0, 1.55, .54, Math.PI / 2);
+  combatCover(7.0, -11.0, 1.65, .56);
 
   // Lighting panels and broad, soft room lights.
   for (const [x, z, w] of [[0, 8, 3.0], [10, 7, 2.7], [10, -8, 2.6], [-11, -11, 2.4], [-11, 0, 2.4], [0, -11, 2.0]]) {
@@ -151,6 +172,17 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
     addRoomLight(room, 0xf8fbff, 4, x, 3.65, z, 8.5);
   }
 
+  // Widen the existing ground floor without changing its room proportions.
+  // Geometry, collision data, spawn, and navigation share the same transform.
+  const arenaScale = 1.12;
+  room.group.scale.set(arenaScale, 1, arenaScale);
+  room.bounds.minX *= arenaScale; room.bounds.maxX *= arenaScale;
+  room.bounds.minZ *= arenaScale; room.bounds.maxZ *= arenaScale;
+  room.spawn.x *= arenaScale; room.spawn.z *= arenaScale;
+  for (const c of room.colliders) {
+    c.minX *= arenaScale; c.maxX *= arenaScale;
+    c.minZ *= arenaScale; c.maxZ *= arenaScale;
+  }
   const inside = (x, z, r) => x >= room.bounds.minX + r && x <= room.bounds.maxX - r && z >= room.bounds.minZ + r && z <= room.bounds.maxZ - r;
   const isWalkable = (x, z, radius = 0) => {
     if (!Number.isFinite(x) || !Number.isFinite(z) || !inside(x, z, radius)) return false;
@@ -200,7 +232,7 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
     }
     return null;
   };
-  const cellSize = .5, originX = -17, originZ = -16, width = 68, height = 64;
+  const cellSize = .5, originX = -20, originZ = -19, width = 80, height = 76;
   const open = new Uint8Array(width * height);
   for (let iz = 0; iz < height; iz++) for (let ix = 0; ix < width; ix++)
     open[iz * width + ix] = isWalkable(originX + (ix + .5) * cellSize, originZ + (iz + .5) * cellSize, .32) ? 1 : 0;
