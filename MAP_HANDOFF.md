@@ -22,3 +22,10 @@
 ## 当前状态与联调
 
 此前浏览器检查确认房屋载入、玩家移动和首波启动正常。地图分支提供出生点、碰撞与导航数据；玩法方接入 A* 和拾取后，仍需共同验收门口寻路、家具旁拾取和碎块碰撞。当前敌人 AI 仍是旧的直线移动，未接入导航网格前可能在隔墙或家具附近卡住。协作流程见 [COLLABORATION_AGREEMENT.md](COLLABORATION_AGREEMENT.md)。
+
+## 新地图实验版
+
+- `assets/house-map-v2.js` 是独立的第二版住宅布局，包含更开阔的中央客厅、中心箱体、家具掩体、侧翼房间和环形通道；不会自动替换当前游戏地图。
+- `map-preview.html` 提供独立查看器，可切换碰撞箱、出生点和导航网格，也可进入第一人称查看。
+- 当前测试页地址：`https://jdvance9112001.github.io/redline-cqb-arena/map-preview.html`。
+- 通过地图评审后，再由集成负责人把 `createHouseArenaV2` 接进正式游戏；在此之前正式游戏仍使用 v1 房屋。
