@@ -7,6 +7,7 @@ On death, enemies break into directional, physics-driven glass fragments.
 
 Map and gameplay integration contract: [MAP_GAMEPLAY_CONTRACT.md](MAP_GAMEPLAY_CONTRACT.md).
 House map handoff: [MAP_HANDOFF.md](MAP_HANDOFF.md).
+Final collaboration and merge workflow: [COLLABORATION_AGREEMENT.md](COLLABORATION_AGREEMENT.md).
 
 Controls: WASD to move, mouse to aim, left click to fire, Q or right click to throw
 the pistol, 1/2 to switch weapons, Escape to pause, R to restart, and M to mute.

@@ -203,7 +203,7 @@ export function createHouseArena({ THREE, M, addRoomBox, addRoomPlane, addRoomLi
     [6.0, -3.0], [11.6, -3.2], [6.2, -10.1], [11.3, -9.7]
   ];
   const points = planned.filter(([x, z]) =>
-    isWalkable(x, z, .42) && Math.hypot(x - room.spawn.x, z - room.spawn.z) >= 5.0);
+    isWalkable(x, z, .5) && Math.hypot(x - room.spawn.x, z - room.spawn.z) >= 5.0);
   // Supply spare spots if furniture moved during art iteration.
   for (let z = -12.5; points.length < 26 && z <= 12.5; z += 2.3) {
     for (let x = -13.5; points.length < 26 && x <= 13.5; x += 2.3) {
