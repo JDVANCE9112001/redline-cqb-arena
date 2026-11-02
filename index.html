@@ -575,6 +575,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { createHouseArena } from './assets/house-map.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -3580,11 +3581,15 @@ function defeatEnemy(enemy, hitPoint, normal = null, impact = null) {
 
 function spawnEnemies(count = 1) {
   const bounds = ROOMS.current?.bounds || MAP.bounds;
-  const candidates = [
+  const oldCandidates = [
     [-12.8, 9.2], [12.8, 9.2], [-12.8, 1.8], [12.8, 1.8],
     [-12.8, -6.4], [12.8, -6.4], [-8.0, -12.2], [8.0, -12.2],
     [0, -12.1], [-6.0, 8.7], [6.0, 8.7], [-4.6, -5.6], [4.6, -4.0]
   ];
+  const mapSpawns = window.RED_SHIFT_MAP?.version === 1
+    ? window.RED_SHIFT_MAP.enemySpawns.filter(p => campaign.level >= p.waveMin && campaign.level <= p.waveMax)
+    : [];
+  const candidates = mapSpawns.length ? mapSpawns.map(p => [p.x, p.z]) : oldCandidates;
   for (let i = candidates.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
@@ -3760,6 +3765,7 @@ function addRoomBox(room, material, w, h, d, x, y, z, opts = {}) {
       maxX: x + halfX,
       minZ: z - halfZ,
       maxZ: z + halfZ,
+      bottom: y - h / 2,
       top: y + h / 2,
       walkable: !!opts.walkable
     };
@@ -4337,7 +4343,9 @@ function randomizeRoomCover(room) {
 function ensureRooms() {
   if (ROOMS.start) return;
   ROOMS.start = buildStartRoom();
-  ROOMS.levels = [buildWarehouseRoom()];
+  const house = createHouseArena({ THREE, M, addRoomBox, addRoomPlane, addRoomLight, roomsRoot, skyTexture });
+  ROOMS.levels = [house];
+  window.RED_SHIFT_MAP = house.map;
 }
 
 function activeObjectiveMeshes() {
@@ -4813,7 +4821,7 @@ function startCampaign() {
   updateWeaponVisibility();
   setWeaponHud();
   campaign.completedWaves = 0;
-  campaign.roomTitle = 'WAREHOUSE';
+  campaign.roomTitle = ROOMS.levels[0].title;
   campaign.retries = 0;
   campaign.totalSpawned = 0;
   campaign.levelSpawned = 0;
@@ -4831,7 +4839,7 @@ function startCampaign() {
   ui.elapsedTime.textContent = '0.00';
   ui.runTime.textContent = '00:00';
   const arena = ROOMS.levels[0];
-  randomizeRoomCover(arena);
+  if (arena.randomSpots.length) randomizeRoomCover(arena);
   activateRoom(arena);
   resetPlayerAt(arena);
   waveCountdown = 0;
