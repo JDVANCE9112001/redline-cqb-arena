@@ -2196,12 +2196,16 @@ const objectiveShardLightPool = makeSharedPool(() => new THREE.MeshPhysicalMater
 
 
 const shardRingGeoS = new THREE.RingGeometry(.075, .125, 28);
-const enemyBodyRingGeoS = new THREE.RingGeometry(.28, .34, 32);
+const enemyBodyRingGeoS = new THREE.RingGeometry(.29, .315, 32);
 const gateBurstRingGeoS = new THREE.RingGeometry(.07, .15, 28);
 const enemyFlashPool = makeSpritePool(0xffc8d2, .72, 20);
 const gateFlashPool = makeSpritePool(0xd7f7ff, .74, 16);
 const enemyRingPool = makeSharedPool(() => new THREE.MeshBasicMaterial({
   color: 0xff6f88, transparent: true, opacity: .6,
+  depthWrite: false, side: THREE.DoubleSide, toneMapped: false
+}), 16);
+const enemyBodyRingPool = makeSharedPool(() => new THREE.MeshBasicMaterial({
+  color: 0xff829a, transparent: true, opacity: .4,
   depthWrite: false, side: THREE.DoubleSide, toneMapped: false
 }), 16);
 const gateRingPool = makeSharedPool(() => new THREE.MeshBasicMaterial({
@@ -3283,7 +3287,9 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
   ring.quaternion.copy(camera.quaternion);
   scene.add(ring);
 
-  const bodyRing = enemyRoot?.group ? new THREE.Mesh(enemyBodyRingGeoS, ringMat) : null;
+  const bodyRingMat = enemyRoot?.group ? enemyBodyRingPool.take() : null;
+  if (bodyRingMat) bodyRingMat.opacity = .4;
+  const bodyRing = bodyRingMat ? new THREE.Mesh(enemyBodyRingGeoS, bodyRingMat) : null;
   if (bodyRing) {
     bodyRing.position.copy(bodyCenter);
     bodyRing.quaternion.copy(camera.quaternion);
@@ -3300,7 +3306,7 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
   shardGroups.push({
     group, mat: shardMat, lightMat: shardLightMat, pieces,
     flash, flashMat: flash.material,
-    ring, bodyRing, ringMat,
+    ring, bodyRing, ringMat, bodyRingMat,
     light: burstLight,
     life: 1.35, total: 1.35, burstAge: 0
   });
@@ -4653,8 +4659,8 @@ function warmSharedShaders() {
   };
   for (const pool of [
     enemyShardPool, enemyShardLightPool, objectiveShardPool, objectiveShardLightPool,
-    enemyFlashPool, gateFlashPool, enemyRingPool, gateRingPool, handGlowPool, thrownGlowPool
-  ]) for (const material of pool.items) add(material, pool === enemyRingPool || pool === gateRingPool ? shardRingGeoS : glassChunkGeo);
+    enemyFlashPool, gateFlashPool, enemyRingPool, enemyBodyRingPool, gateRingPool, handGlowPool, thrownGlowPool
+  ]) for (const material of pool.items) add(material, pool === enemyBodyRingPool ? enemyBodyRingGeoS : pool === enemyRingPool || pool === gateRingPool ? shardRingGeoS : glassChunkGeo);
   for (const pool of impactGlowPools.values()) for (const material of pool.items) add(material);
   for (const pool of impactSparkPools.values()) for (const material of pool.items) add(material, sparkGeo);
   for (const pool of muzzleFlashPools.values()) for (const material of pool.items) add(material);
@@ -6391,7 +6397,10 @@ function updateShards(dt, flow) {
     s.ring.scale.setScalar(1 + (1 - k) * 5.5);
     s.ring.quaternion.copy(camera.quaternion);
     if (s.bodyRing) {
-      s.bodyRing.scale.setScalar(1 + Math.min(1, s.burstAge / .22) * 3.3);
+      const ringAge = Math.min(1, s.burstAge / .45);
+      s.bodyRing.scale.setScalar(1 + Math.min(1, s.burstAge / .22) * 1.8);
+      s.bodyRingMat.opacity = .4 * (1 - ringAge) ** 2;
+      s.bodyRing.visible = ringAge < 1;
       s.bodyRing.quaternion.copy(camera.quaternion);
     }
     s.light.intensity = 5.5 * Math.pow(k, 2.2);
