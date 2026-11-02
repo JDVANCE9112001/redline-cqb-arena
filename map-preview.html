@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f0f2f0">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23b7192c'/%3E%3C/svg%3E">
+<title>RED SHIFT · 新地图测试版</title>
+<style>
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#e9ecea;color:#17201f;font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif}canvas{display:block;width:100%;height:100%}#panel{position:fixed;z-index:2;top:18px;left:18px;width:min(390px,calc(100vw - 36px));padding:17px 18px 14px;background:rgba(249,250,248,.93);border:1px solid #cbd0ce;box-shadow:0 8px 36px #24302a26;backdrop-filter:blur(10px)}h1{font-size:15px;letter-spacing:.16em;margin:0 0 3px}small{display:block;color:#6c7773;letter-spacing:.08em;font-size:10px}#stats{margin:13px 0 11px;color:#36413d;font-size:12px}#controls{display:flex;flex-wrap:wrap;gap:7px}button{border:1px solid #bfc6c2;background:#fff;color:#18211e;padding:7px 10px;cursor:pointer;font:inherit;font-size:11px}button:hover,button.on{background:#b7192c;color:#fff;border-color:#b7192c}#tip{margin-top:12px;color:#65716c;font-size:11px}.tag{position:fixed;right:18px;top:18px;background:#b7192c;color:white;padding:7px 11px;font-size:10px;letter-spacing:.12em;z-index:2}#error{position:fixed;inset:auto 18px 18px;display:none;padding:12px;background:#4d1018;color:#fff;white-space:pre-wrap;z-index:4}
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>RED SHIFT · HOUSE V2</h1>
+  <small>NEW MAP PREVIEW / TEST BUILD</small>
+  <div id="stats">正在生成地图…</div>
+  <div id="controls">
+    <button id="reset">重置视角</button><button id="colliders">碰撞箱</button>
+    <button id="spawns">敌人出生点</button><button id="nav">导航网格</button>
+    <button id="first">第一人称查看</button>
+  </div>
+  <div id="tip">鼠标拖动旋转 · 滚轮缩放 · WASD 平移。第一人称模式下 WASD 移动，拖动鼠标转向。</div>
+</div>
+<div class="tag">TEST ONLY · 不影响正式游戏</div>
+<div id="error"></div>
+<script type="module">
+import * as THREE from './assets/three.module.js';
+import { createHouseArenaV2 } from './assets/house-map-v2.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xe7ebea);
+scene.fog = new THREE.Fog(0xe7ebea, 55, 105);
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, .1, 180);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xf8fbff, 0x77817d, 2.0));
+const key = new THREE.DirectionalLight(0xfff9ef, 2.2);
+key.position.set(-13, 25, 14); key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.left = -24; key.shadow.camera.right = 24; key.shadow.camera.top = 24; key.shadow.camera.bottom = -24;
+scene.add(key);
+const roomsRoot = new THREE.Group(); scene.add(roomsRoot);
+const skyCanvas = document.createElement('canvas'); skyCanvas.width = 8; skyCanvas.height = 8;
+const skyCtx = skyCanvas.getContext('2d'); const skyGrad = skyCtx.createLinearGradient(0,0,0,8);
+skyGrad.addColorStop(0,'#b4c0c1'); skyGrad.addColorStop(1,'#e2e8e4'); skyCtx.fillStyle=skyGrad; skyCtx.fillRect(0,0,8,8);
+const skyTexture = new THREE.CanvasTexture(skyCanvas);
+
+function addRoomBox(room, material, w, h, d, x, y, z, opts = {}) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), material);
+  mesh.position.set(x,y,z); if (opts.ry) mesh.rotation.y = opts.ry;
+  mesh.castShadow = opts.cast ?? false; mesh.receiveShadow = opts.receive ?? true;
+  mesh.userData.ignoreRay = opts.ignoreRay ?? !opts.solid;
+  room.group.add(mesh);
+  if (opts.solid) {
+    const a=mesh.rotation.y, hx=(Math.abs(Math.cos(a))*w+Math.abs(Math.sin(a))*d)/2, hz=(Math.abs(Math.sin(a))*w+Math.abs(Math.cos(a))*d)/2;
+    room.colliders.push({minX:x-hx,maxX:x+hx,minZ:z-hz,maxZ:z+hz,bottom:y-h/2,top:y+h/2,walkable:!!opts.walkable});
+  }
+  return mesh;
+}
+function addRoomPlane(room, material, w, h, x, y, z, rx=0, ry=0, opts={}) {
+  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),material); mesh.rotation.set(rx,ry,0); mesh.position.set(x,y,z);
+  mesh.receiveShadow=opts.receive??true; mesh.userData.ignoreRay=true; room.group.add(mesh); return mesh;
+}
+function addRoomLight(room, color, intensity, x, y, z, distance) {
+  const light=new THREE.PointLight(color,intensity,distance,2); light.position.set(x,y,z); room.group.add(light); return light;
+}
+const room=createHouseArenaV2({THREE,addRoomBox,addRoomPlane,addRoomLight,roomsRoot,skyTexture});
+const map=room.map;
+window.RED_SHIFT_MAP=map;
+window.__HOUSE_V2_PREVIEW__={room,map,scene,camera,renderer};
+const overlays=new THREE.Group(); scene.add(overlays);
+let collisionVisible=false, spawnVisible=true, navVisible=false, firstPerson=false;
+const colliderGroup=new THREE.Group(), spawnGroup=new THREE.Group(); overlays.add(colliderGroup,spawnGroup);
+for(const c of map.colliders){
+  const g=new THREE.BoxGeometry(c.maxX-c.minX,Math.max(.02,c.top-c.bottom),c.maxZ-c.minZ);
+  const edge=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0xd51d36,transparent:true,opacity:.82}));
+  edge.position.set((c.minX+c.maxX)/2,(c.bottom+c.top)/2,(c.minZ+c.maxZ)/2); colliderGroup.add(edge);
+}
+for(const p of map.enemySpawns){
+  const marker=new THREE.Mesh(new THREE.OctahedronGeometry(.20,0),new THREE.MeshBasicMaterial({color:0xb7192c}));
+  marker.position.set(p.x,.34,p.z); spawnGroup.add(marker);
+}
+colliderGroup.visible=collisionVisible; spawnGroup.visible=spawnVisible;
+let navPoints=null;
+function buildNav(){
+  const coords=[];
+  for(let z=0;z<map.navGrid.height;z++)for(let x=0;x<map.navGrid.width;x++)if(map.navGrid.isOpen(x,z)){
+    coords.push(map.navGrid.originX+(x+.5)*map.navGrid.cellSize,.055,map.navGrid.originZ+(z+.5)*map.navGrid.cellSize);
+  }
+  const geom=new THREE.BufferGeometry(); geom.setAttribute('position',new THREE.Float32BufferAttribute(coords,3));
+  navPoints=new THREE.Points(geom,new THREE.PointsMaterial({color:0x208c68,size:.105,transparent:true,opacity:.52,sizeAttenuation:false}));
+  navPoints.visible=navVisible; scene.add(navPoints);
+}
+buildNav();
+document.querySelector('#stats').textContent=`房屋范围 34 × 32 m · 出生点 ${map.enemySpawns.length} 个 · 碰撞箱 ${map.colliders.length} 个 · 导航 ${map.navGrid.width} × ${map.navGrid.height}`;
+
+let target=new THREE.Vector3(0,1.0,0), radius=44, theta=.72, phi=.88, yaw=0, pitch=0;
+const spawn=map.playerSpawn;
+function updateCamera(){
+  if(firstPerson){camera.position.set(fp.x,1.72,fp.z);camera.rotation.order='YXZ';camera.rotation.set(pitch,yaw,0);return;}
+  camera.up.set(0,1,0);
+  camera.position.set(target.x+radius*Math.sin(phi)*Math.sin(theta),target.y+radius*Math.cos(phi),target.z+radius*Math.sin(phi)*Math.cos(theta));
+  camera.lookAt(target);
+}
+let fp={x:spawn.x,z:spawn.z}; updateCamera();
+let dragging=false,lastX=0,lastY=0;
+renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;renderer.domElement.setPointerCapture(e.pointerId);});
+renderer.domElement.addEventListener('pointerup',()=>dragging=false);
+renderer.domElement.addEventListener('pointermove',e=>{if(!dragging)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;if(firstPerson){yaw-=dx*.004;pitch=Math.max(-1.25,Math.min(1.25,pitch-dy*.004));}else{theta-=dx*.006;phi=Math.max(.27,Math.min(1.45,phi+dy*.005));}updateCamera();});
+renderer.domElement.addEventListener('wheel',e=>{if(!firstPerson){radius=Math.max(24,Math.min(74,radius+e.deltaY*.035));updateCamera();}},{passive:true});
+const keys=new Set(); addEventListener('keydown',e=>{keys.add(e.code);if(['KeyW','KeyA','KeyS','KeyD','Space'].includes(e.code))e.preventDefault();});addEventListener('keyup',e=>keys.delete(e.code));
+document.querySelector('#colliders').onclick=e=>{collisionVisible=!collisionVisible;colliderGroup.visible=collisionVisible;e.currentTarget.classList.toggle('on',collisionVisible);};
+document.querySelector('#spawns').onclick=e=>{spawnVisible=!spawnVisible;spawnGroup.visible=spawnVisible;e.currentTarget.classList.toggle('on',spawnVisible);};
+document.querySelector('#nav').onclick=e=>{navVisible=!navVisible;navPoints.visible=navVisible;e.currentTarget.classList.toggle('on',navVisible);};
+document.querySelector('#first').onclick=e=>{firstPerson=!firstPerson;if(firstPerson){fp={x:spawn.x,z:spawn.z};yaw=spawn.yaw;pitch=0;}e.currentTarget.classList.toggle('on',firstPerson);e.currentTarget.textContent=firstPerson?'返回俯视':'第一人称查看';updateCamera();};
+document.querySelector('#reset').onclick=()=>{firstPerson=false;target.set(0,1,0);radius=44;theta=.72;phi=.88;yaw=spawn.yaw;pitch=0;fp={x:spawn.x,z:spawn.z};document.querySelector('#first').classList.remove('on');document.querySelector('#first').textContent='第一人称查看';updateCamera();};
+let last=performance.now();
+function animate(now){requestAnimationFrame(animate);const dt=Math.min(.05,(now-last)/1000);last=now;
+  const forward=(keys.has('KeyW')?1:0)-(keys.has('KeyS')?1:0),side=(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0);
+  if(forward||side){if(firstPerson){const speed=dt*4,fx=-Math.sin(yaw),fz=-Math.cos(yaw);fp.x+=(fx*forward+Math.cos(yaw)*side)*speed;fp.z+=(fz*forward+Math.sin(yaw)*side)*speed;updateCamera();}else{const speed=dt*9;target.x+=speed*(Math.cos(theta)*side-Math.sin(theta)*forward);target.z+=speed*(Math.sin(theta)*side+Math.cos(theta)*forward);updateCamera();}}
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(animate);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+addEventListener('error',e=>{const el=document.querySelector('#error');el.style.display='block';el.textContent=e.message||String(e.error||e);});
+</script>
+</body>
+</html>
