@@ -15,7 +15,7 @@
 
 1. 保留 `index.html` 顶部的 `createHouseArena` 导入、`ensureRooms()` 中的建图与 `window.RED_SHIFT_MAP = house.map`。
 2. 由 MapBridge 读取 `playerSpawn`、`enemySpawns`、`colliders`、`groundHeightAt`、`findDropSpot`、`navGrid`。地图没有提供弹药、武器或波次战斗逻辑。
-3. 当前 `spawnEnemies()` 已临时读取地图出生点；玩法方实现按房间分散与 A* 后可替换这段简单抽样。
+3. `spawnEnemies()` 仍保留旧候选坐标，玩法方用 MapBridge 改为读取 `enemySpawns`，再实现按房间分散与 A*。地图分支没有改这段战斗函数，便于独立合并。
 4. `index.html` 的 `addRoomBox` 现在为碰撞箱提供绝对 `bottom`，请保留。旧版碰撞代码暂时仍按 XZ 检查，地图接口和碎块物理已使用高度信息。
 5. 武器掉落应使用 `findDropSpot` 返回的脚底坐标；返回 `null` 时安全回退。不要把掉落物计时和死亡碎块的 4 秒清理混用。
 

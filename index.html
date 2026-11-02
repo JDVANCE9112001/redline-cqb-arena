@@ -3581,15 +3581,11 @@ function defeatEnemy(enemy, hitPoint, normal = null, impact = null) {
 
 function spawnEnemies(count = 1) {
   const bounds = ROOMS.current?.bounds || MAP.bounds;
-  const oldCandidates = [
+  const candidates = [
     [-12.8, 9.2], [12.8, 9.2], [-12.8, 1.8], [12.8, 1.8],
     [-12.8, -6.4], [12.8, -6.4], [-8.0, -12.2], [8.0, -12.2],
     [0, -12.1], [-6.0, 8.7], [6.0, 8.7], [-4.6, -5.6], [4.6, -4.0]
   ];
-  const mapSpawns = window.RED_SHIFT_MAP?.version === 1
-    ? window.RED_SHIFT_MAP.enemySpawns.filter(p => campaign.level >= p.waveMin && campaign.level <= p.waveMax)
-    : [];
-  const candidates = mapSpawns.length ? mapSpawns.map(p => [p.x, p.z]) : oldCandidates;
   for (let i = candidates.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
