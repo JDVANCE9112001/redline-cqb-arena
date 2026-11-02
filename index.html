@@ -463,7 +463,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <div class="kicker">TIME BENDS AROUND YOU</div>
     <h1><span class="red">RED</span><span class="shift">SHIFT</span></h1>
     <div class="intro-jp">ミ ラ ク シ ス</div>
-    <p class="intro-copy">在同一张战斗地图中迎击 8 波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，开火、投掷和转动视角都不会</b>。带头像贴纸的步枪精英需要命中两次；累计击杀 3 名精英可解锁 12 弹丸散弹枪，按 1 / 2 切换武器。清空一波后有短暂间歇，下一波会更危险。阵亡后结算击杀与存活波次。</p>
+    <p class="intro-copy">在同一张战斗地图中迎击 8 波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，开火、投掷和转动视角都不会</b>。带头像贴纸的步枪精英需要命中两次；累计击杀 3 名精英可解锁 16 弹丸散弹枪，按 1 / 2 切换武器。清空一波后有短暂间歇，下一波会更危险。阵亡后结算击杀与存活波次。</p>
     <div class="intro-actions">
       <button class="enter-btn" id="enter-btn" type="button"><span>进入模拟</span><span>ENTER SIMULATION</span><span class="arrow">↗</span></button>
       <div class="enter-note"><b>点击画面锁定鼠标</b>CLICK ANYWHERE TO ENGAGE</div>
@@ -620,6 +620,7 @@ const composerState = { composer: null, bloom: null };
 let weapons = null;
 let shotgunView = null;
 let shotgunUnlocked = false;
+const SHOTGUN_PELLETS = 16;
 let eliteKills = 0;
 let currentWeapon = 'pistol';
 let playerLight = null;
@@ -2195,6 +2196,7 @@ const objectiveShardLightPool = makeSharedPool(() => new THREE.MeshPhysicalMater
 
 
 const shardRingGeoS = new THREE.RingGeometry(.075, .125, 28);
+const enemyBodyRingGeoS = new THREE.RingGeometry(.28, .34, 32);
 const gateBurstRingGeoS = new THREE.RingGeometry(.07, .15, 28);
 const enemyFlashPool = makeSpritePool(0xffc8d2, .72, 20);
 const gateFlashPool = makeSpritePool(0xd7f7ff, .74, 16);
@@ -3215,30 +3217,50 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
   shardLightMat.opacity = .34;
   const group = new THREE.Group();
   const pieces = [];
-  const count = 38;
+  const count = enemyRoot?.group ? 46 : 38;
+  const impactCount = 16;
+  const enemyScale = enemyRoot?.group?.scale.y || 1;
+  const bodyCenter = enemyRoot?.group
+    ? new THREE.Vector3(enemyRoot.group.position.x, enemyRoot.group.position.y + 1.25 * enemyScale, enemyRoot.group.position.z)
+    : point.clone();
   for (let i = 0; i < count; i++) {
-    const isChunk = i > 25;
+    const bodyPiece = !!enemyRoot?.group && i >= impactCount;
+    const isChunk = i % 4 === 0;
     const mesh = new THREE.Mesh(isChunk ? glassChunkGeo : glassPlateGeo, i % 4 === 0 ? shardLightMat : shardMat);
-    const scatter = isChunk ? .26 : .12;
-    mesh.position.copy(point).add(new THREE.Vector3(
-      rand(-scatter, scatter),
-      rand(-scatter * .8, scatter * .8),
-      rand(-scatter, scatter)
-    ));
+    if (bodyPiece) {
+      const part = i - impactCount;
+      let x, y;
+      if (part < 10) { x = rand(-.22, .22); y = rand(.98, 1.7); }
+      else if (part < 16) { x = rand(-.14, .14); y = rand(1.78, 2.08); }
+      else if (part < 22) { x = (part % 2 ? 1 : -1) * rand(.27, .48); y = rand(.95, 1.6); }
+      else { x = (part % 2 ? 1 : -1) * rand(.08, .19); y = rand(.14, .94); }
+      mesh.position.set(
+        enemyRoot.group.position.x + x * enemyScale,
+        enemyRoot.group.position.y + y * enemyScale,
+        enemyRoot.group.position.z + rand(-.14, .14) * enemyScale
+      );
+    } else {
+      const scatter = isChunk ? .24 : .13;
+      mesh.position.copy(point).add(new THREE.Vector3(
+        rand(-scatter, scatter),
+        rand(-scatter * .8, scatter * .8),
+        rand(-scatter, scatter)
+      ));
+    }
     if (isChunk) {
-      const scale = rand(.012, .042);
+      const scale = rand(bodyPiece ? .026 : .012, bodyPiece ? .072 : .042);
       mesh.scale.set(scale, scale * rand(1.4, 3.6), scale * rand(.7, 1.5));
     } else {
-      mesh.scale.set(rand(.5, 1.6), rand(.45, 1.5), 1);
+      mesh.scale.set(rand(bodyPiece ? 1.3 : .5, bodyPiece ? 2.5 : 1.6), rand(bodyPiece ? 1.2 : .45, bodyPiece ? 2.3 : 1.5), 1);
     }
     mesh.rotation.set(rand(0, 6.3), rand(0, 6.3), rand(0, 6.3));
     const radial = new THREE.Vector3(
-      mesh.position.x - point.x,
-      mesh.position.y - point.y + rand(.03, .22),
-      mesh.position.z - point.z
+      mesh.position.x - (bodyPiece ? bodyCenter.x : point.x),
+      mesh.position.y - (bodyPiece ? bodyCenter.y : point.y) + rand(.03, .22),
+      mesh.position.z - (bodyPiece ? bodyCenter.z : point.z)
     ).normalize();
-    const velocity = radial.multiplyScalar(rand(.45, 3.4))
-      .add(direction.clone().multiplyScalar(rand(.9, 3.8)));
+    const velocity = radial.multiplyScalar(rand(bodyPiece ? 1.4 : .45, bodyPiece ? 4.2 : 3.4))
+      .add(direction.clone().multiplyScalar(rand(.9, 3.2)));
     mesh.userData.velocity = velocity;
     mesh.userData.spin = new THREE.Vector3(rand(-14, 14), rand(-14, 14), rand(-14, 14));
     mesh.userData.gravity = rand(.35, 1.05);
@@ -3261,6 +3283,14 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
   ring.quaternion.copy(camera.quaternion);
   scene.add(ring);
 
+  const bodyRing = enemyRoot?.group ? new THREE.Mesh(enemyBodyRingGeoS, ringMat) : null;
+  if (bodyRing) {
+    bodyRing.position.copy(bodyCenter);
+    bodyRing.quaternion.copy(camera.quaternion);
+    bodyRing.renderOrder = 5;
+    group.add(bodyRing);
+  }
+
   const burstLight = takeBurstLight();
   burstLight.color.setHex(0xff3155);
   burstLight.intensity = 5.5;
@@ -3270,9 +3300,9 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
   shardGroups.push({
     group, mat: shardMat, lightMat: shardLightMat, pieces,
     flash, flashMat: flash.material,
-    ring, ringMat,
+    ring, bodyRing, ringMat,
     light: burstLight,
-    life: 1.35, total: 1.35
+    life: 1.35, total: 1.35, burstAge: 0
   });
 }
 
@@ -3311,7 +3341,7 @@ function defeatEnemy(enemy, hitPoint, normal = null) {
       shotgunUnlocked = true;
       selectWeapon('shotgun');
       sound.pickup();
-      toast('散弹枪已解锁 · 12 弹丸圆盘散射 · 1 / 2 切换武器', 3200);
+      toast(`散弹枪已解锁 · ${SHOTGUN_PELLETS} 弹丸圆盘散射 · 1 / 2 切换武器`, 3200);
     }
   }
   if (!shotgunUnlocked) setWeaponHud();
@@ -4656,7 +4686,7 @@ function warmSharedShaders() {
   scene.add(warm);
   const preShards = shardGroups.length;
   const preEffects = effects.length;
-  glassBurstAt(new THREE.Vector3(-.6, 1.4, 4.2), new THREE.Vector3(0, 0, -1));
+  glassBurstAt(new THREE.Vector3(-.6, 1.4, 4.2), new THREE.Vector3(0, 0, -1), enemyWarm);
   objectiveBurstAt(new THREE.Vector3(.6, 1.5, 4.2), new THREE.Vector3(0, 0, -1));
   addImpact(new THREE.Vector3(0, 1.4, 4.2), new THREE.Vector3(0, 0, -1), 0xff8a72, true);
   addMuzzleFlash(new THREE.Vector3(0, 1.5, 4.2), 0xffc6a1);
@@ -4742,7 +4772,7 @@ function setWeaponHud(mode = 'armed') {
   const ready = mode === 'armed';
   ui.weaponReadout.classList.toggle('throw', !ready && currentWeapon === 'pistol');
   if (currentWeapon === 'shotgun' && shotgunUnlocked) {
-    ui.weaponTopLabel.textContent = '12 PELLETS';
+    ui.weaponTopLabel.textContent = `${SHOTGUN_PELLETS} PELLETS`;
     ui.weaponState.textContent = '散弹枪 · 弹药 ∞';
     ui.weaponHint.textContent = '圆盘散射 · 1 切手枪 / 2 切散弹枪';
     return;
@@ -5998,8 +6028,8 @@ function fireShotgun() {
   const up = new THREE.Vector3().crossVectors(right, forward).normalize();
   const spin = Math.random() * Math.PI * 2;
   const spread = Math.tan(THREE.MathUtils.degToRad(6.5));
-  for (let i = 0; i < 12; i++) {
-    const radius = Math.sqrt((i + .5) / 12) * spread;
+  for (let i = 0; i < SHOTGUN_PELLETS; i++) {
+    const radius = Math.sqrt((i + .5) / SHOTGUN_PELLETS) * spread;
     const angle = spin + i * 2.399963229728653;
     const direction = forward.clone()
       .addScaledVector(right, Math.cos(angle) * radius)
@@ -6346,9 +6376,11 @@ function updateShards(dt, flow) {
   // floor keeps them alive visually while still letting them disappear (sim life).
   const simDt = dt * flow;
   // Near-frozen world: shards should hang almost still, not travel at 1/30×.
-  const motionDt = dt * (flow >= .3 ? flow : .0025);
   for (let i = shardGroups.length - 1; i >= 0; i--) {
     const s = shardGroups[i];
+    const openingBurst = s.bodyRing && s.burstAge < .14;
+    const motionDt = dt * (openingBurst ? .85 : flow >= .3 ? flow : .0025);
+    if (s.bodyRing) s.burstAge += dt;
     s.life -= simDt;
     const k = clamp(s.life / s.total, 0, 1);
     s.mat.opacity = .77 * Math.min(1, k * 2.4);
@@ -6358,6 +6390,10 @@ function updateShards(dt, flow) {
     s.ringMat.opacity = .6 * Math.pow(k, 4);
     s.ring.scale.setScalar(1 + (1 - k) * 5.5);
     s.ring.quaternion.copy(camera.quaternion);
+    if (s.bodyRing) {
+      s.bodyRing.scale.setScalar(1 + Math.min(1, s.burstAge / .22) * 3.3);
+      s.bodyRing.quaternion.copy(camera.quaternion);
+    }
     s.light.intensity = 5.5 * Math.pow(k, 2.2);
     for (const p of s.pieces) {
       p.userData.velocity.y -= 7.2 * p.userData.gravity * motionDt;
@@ -6843,7 +6879,14 @@ if (PREVIEW) {
     eliteKills = 3;
     shotgunUnlocked = true;
     selectWeapon('shotgun');
-    setHudObjective(4, '散弹枪模型预览', 'PREVIEW', '12 PELLET DISC');
+    setHudObjective(4, '散弹枪模型预览', 'PREVIEW', `${SHOTGUN_PELLETS} PELLET DISC`);
+  }
+  if (new URLSearchParams(location.search).get('preview') === 'shatter') {
+    const demo = new Enemy(0, 8, 0, 1.2);
+    const hit = new THREE.Vector3(0, 1.4, 8.15);
+    glassBurstAt(hit, new THREE.Vector3(0, 0, 1), demo);
+    scene.remove(demo.group);
+    setHudObjective(2, '击碎效果预览', 'PREVIEW', 'FULL BODY SHATTER');
   }
   // The preview path is used by the development screenshot harness.
 }
