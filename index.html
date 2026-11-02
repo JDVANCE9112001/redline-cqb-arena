@@ -1885,6 +1885,9 @@ const enemyProjectiles = [];
 const playerBullets = [];
 const activeEnemies = [];
 const shardGroups = [];
+// Enemy body bursts are kept separate from objective/glass VFX so strict
+// simulation time and real-time cleanup can be applied only to body debris.
+const bodyBursts = [];
 
 const unitTracerGeo = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
 const sparkGeo = new THREE.TetrahedronGeometry(1, 0);
@@ -2417,6 +2420,10 @@ class Enemy {
     this.elite = elite;
     this.maxHp = elite ? 2 : 1;
     this.hp = this.maxHp;
+    // Future weapon-drop data. Death captures a copy before the body is removed.
+    this.loadout = elite
+      ? { kind: 'rifle', modelKey: 'rifle', ammo: 8 }
+      : { kind: 'revolver', modelKey: 'revolver', ammo: 7 };
     this.phase = Math.random() * Math.PI * 2;
     this.walk = 0;
     this.attackPose = 0;
@@ -3057,8 +3064,8 @@ class Enemy {
     });
   }
 
-  onHit(point, normal) {
-    return damageEnemy(this, point, normal);
+  onHit(point, normal, impact = null) {
+    return damageEnemy(this, point, normal, impact);
   }
 
   disposeExtras() {
@@ -3211,133 +3218,272 @@ function newGlassShardMaterial() {
   });
 }
 
-const bodyShardBoxGeo = new THREE.BoxGeometry(1, 1, 1);
-const bodyShardLimbGeo = new THREE.CylinderGeometry(1, 1, 1, 7);
-const bodyShardHeadGeo = new THREE.IcosahedronGeometry(1, 0);
+/* --------------------------------------------------------------------------
+   Enemy body debris: precomputed solid chunks, one batch per death.
+   -------------------------------------------------------------------------- */
+function cleanChunkGeometry(geometry) {
+  const clean = geometry.index ? geometry.toNonIndexed() : geometry;
+  clean.deleteAttribute('uv');
+  clean.deleteAttribute('uv1');
+  clean.deleteAttribute('uv2');
+  clean.clearGroups();
+  clean.computeBoundingSphere();
+  return clean;
+}
+
+const bodyChunkBoxGeo = cleanChunkGeometry(new THREE.BoxGeometry(1, 1, 1));
+const bodyChunkLimbGeo = cleanChunkGeometry(new THREE.CylinderGeometry(1, 1, 1, 7));
+const bodyChunkHeadGeo = cleanChunkGeometry(new THREE.IcosahedronGeometry(1, 0));
+
 const BODY_SHATTER_PARTS = new Set([
-  'torso', 'head', 'upper_arm_l', 'upper_arm_r', 'forearm_l', 'forearm_r',
-  'thigh_l', 'thigh_r', 'shin_l', 'shin_r'
+  'torso', 'head', 'neck',
+  'upper_arm_l', 'upper_arm_r', 'forearm_l', 'forearm_r', 'hand_l', 'hand_r',
+  'thigh_l', 'thigh_r', 'shin_l', 'shin_r', 'foot_l', 'foot_r'
 ]);
 
-function addBodyShards(enemy, point, direction, group, pieces, material) {
-  if (!enemy?.hitParts) return;
-  enemy.group.updateMatrixWorld(true);
-  const worldPosition = new THREE.Vector3();
-  const worldRotation = new THREE.Quaternion();
-  const worldScale = new THREE.Vector3();
-  const localCenter = new THREE.Vector3();
-  const size = new THREE.Vector3();
-  const bodyCenter = enemy.group.localToWorld(new THREE.Vector3(0, 1.1, 0));
-  for (const part of enemy.hitParts) {
-    const name = part.userData.shatterPart;
-    if (!BODY_SHATTER_PARTS.has(name)) continue;
-    if (!part.geometry.boundingBox) part.geometry.computeBoundingBox();
-    const box = part.geometry.boundingBox;
-    box.getCenter(localCenter);
-    box.getSize(size);
-    part.matrixWorld.decompose(worldPosition, worldRotation, worldScale);
-    const sections = name === 'torso' ? 9 : name === 'head' ? 5 : 2;
-    for (let i = 0; i < sections; i++) {
-      const piece = new THREE.Mesh(
-        name === 'torso' ? bodyShardBoxGeo : name === 'head' ? bodyShardHeadGeo : bodyShardLimbGeo,
-        material
-      );
-      const center = localCenter.clone();
-      if (name === 'torso') {
-        center.x += (i % 3 - 1) * size.x / 3;
-        center.y += (Math.floor(i / 3) - 1) * size.y / 3;
-        piece.scale.set(size.x * .30, size.y * .30, size.z * .88);
-      } else if (name === 'head') {
-        const offsets = [[0, .28, 0], [-.28, 0, .16], [.28, 0, .16], [0, -.26, .15], [0, 0, -.27]];
-        const o = offsets[i];
-        center.add(new THREE.Vector3(o[0] * size.x, o[1] * size.y, o[2] * size.z));
-        piece.scale.setScalar(Math.min(size.x, size.y, size.z) * .32);
-      } else {
-        center.y += (i ? .25 : -.25) * size.y;
-        const radius = Math.max(.018, Math.min(size.x, size.z) * .44);
-        piece.scale.set(radius, size.y * .46, radius);
+const BODY_CHUNK_TEMPLATES = new Map();
+let bodyChunkTemplatesReady = false;
+
+function addBodyChunkTemplate(partName, geometry, localOffset, scale, shape) {
+  const safeScale = new THREE.Vector3(
+    Math.max(.01, scale.x),
+    Math.max(.01, scale.y),
+    Math.max(.01, scale.z)
+  );
+  const volume = shape === 'cylinder'
+    ? Math.PI * safeScale.x * safeScale.z * safeScale.y
+    : shape === 'ico'
+      ? Math.PI * 4 / 3 * Math.pow(Math.min(safeScale.x, safeScale.y, safeScale.z) * .72, 3)
+      : safeScale.x * safeScale.y * safeScale.z;
+  const maxExtent = Math.max(safeScale.x, safeScale.y, safeScale.z);
+  const mass = clamp(volume * 140, .28, 3.2);
+  const radius = Math.max(.02, maxExtent * .5);
+  let list = BODY_CHUNK_TEMPLATES.get(partName);
+  if (!list) {
+    list = [];
+    BODY_CHUNK_TEMPLATES.set(partName, list);
+  }
+  list.push({
+    geometry, localOffset: localOffset.clone(), scale: safeScale,
+    volume, mass, radius, invInertia: 1 / (mass * Math.max(.002, radius * radius)),
+    maxExtent
+  });
+}
+
+function buildEnemyChunkTemplates() {
+  if (bodyChunkTemplatesReady) return;
+  bodyChunkTemplatesReady = true;
+  const geos = GAME_ASSETS.enemyGeos;
+  if (!geos) return;
+  for (const partName of BODY_SHATTER_PARTS) {
+    const geo = geos[partName];
+    if (!geo) continue;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    const box = geo.boundingBox;
+    const size = new THREE.Vector3().subVectors(box.max, box.min);
+    const center = new THREE.Vector3().addVectors(box.min, box.max).multiplyScalar(.5);
+
+    if (partName === 'torso') {
+      const columns = 3;
+      const rows = 3;
+      const w = size.x / columns;
+      const h = size.y / rows;
+      const d = size.z * .92;
+      for (let row = 0; row < rows; row++) {
+        for (let column = 0; column < columns; column++) {
+          const local = new THREE.Vector3(
+            box.min.x + (column + .5) * w,
+            box.min.y + (row + .5) * h,
+            center.z
+          );
+          addBodyChunkTemplate(partName, bodyChunkBoxGeo, local,
+            new THREE.Vector3(w * .94, h * .92, d), 'box');
+        }
       }
-      piece.scale.multiply(worldScale);
-      piece.position.copy(center.applyMatrix4(part.matrixWorld));
-      piece.quaternion.copy(worldRotation);
-      const radial = piece.position.clone().sub(bodyCenter);
-      radial.y += rand(.1, .45);
-      if (radial.lengthSq() < .001) radial.set(0, 1, 0);
-      piece.userData.velocity = radial.normalize().multiplyScalar(rand(1.3, 3.4))
-        .addScaledVector(direction, rand(1.8, 3.7));
-      piece.userData.spin = new THREE.Vector3(rand(-9, 9), rand(-9, 9), rand(-9, 9));
-      piece.userData.gravity = rand(.8, 1.25);
-      piece.castShadow = false;
-      piece.receiveShadow = false;
-      group.add(piece);
-      pieces.push(piece);
+      continue;
+    }
+
+    if (partName === 'head') {
+      const radius = Math.min(size.x, size.y, size.z) * .32;
+      const offsets = [[0, .28, 0], [-.28, 0, .16], [.28, 0, .16], [0, -.26, .15], [0, 0, -.27]];
+      for (const o of offsets) {
+        const local = center.clone().add(new THREE.Vector3(o[0] * size.x, o[1] * size.y, o[2] * size.z));
+        addBodyChunkTemplate(partName, bodyChunkHeadGeo, local,
+          new THREE.Vector3(radius, radius, radius), 'ico');
+      }
+      continue;
+    }
+
+    if (partName === 'neck') {
+      const radius = Math.max(.016, Math.min(size.x, size.z) * .42);
+      addBodyChunkTemplate(partName, bodyChunkLimbGeo, center,
+        new THREE.Vector3(radius, size.y * .8, radius), 'cylinder');
+      continue;
+    }
+
+    if (partName === 'hand_l' || partName === 'hand_r' || partName === 'foot_l' || partName === 'foot_r') {
+      addBodyChunkTemplate(partName, bodyChunkBoxGeo, center,
+        new THREE.Vector3(size.x * .55, size.y * .55, size.z * .55), 'box');
+      continue;
+    }
+
+    const radius = Math.max(.016, Math.min(size.x, size.z) * .44);
+    const height = size.y * .46;
+    for (let i = 0; i < 2; i++) {
+      const local = center.clone();
+      local.y += (i ? .25 : -.25) * size.y;
+      addBodyChunkTemplate(partName, bodyChunkLimbGeo, local,
+        new THREE.Vector3(radius, height, radius), 'cylinder');
     }
   }
 }
 
-// A dense, localized glass detonation at the exact surface that was hit.
-function glassBurstAt(point, impactNormal, enemyRoot) {
-  const direction = (impactNormal && impactNormal.lengthSq() > .001)
-    ? impactNormal.clone().normalize()
-    : new THREE.Vector3(0, 0, 1);
+function removeBodyBurst(burst) {
+  if (!burst) return;
+  scene.remove(burst.group, burst.flash, burst.ring);
+  if (burst.bodyRing && burst.bodyRing.parent === burst.group) burst.group.remove(burst.bodyRing);
+  if (burst.batched) burst.batched.dispose();
+  if (burst.light) {
+    burst.light.intensity = 0;
+    burst.light.visible = false;
+  }
+}
+
+buildEnemyChunkTemplates();
+
+// Directional body shatter: all glass body parts become solid chunks, with a
+// short visual separation pass layered over strict slow-motion physics.
+function glassBurstAt(point, impactNormal, enemyRoot, impact = null) {
+  if (!enemyRoot?.group) return;
+  buildEnemyChunkTemplates();
+  const forceDir = impact?.direction && impact.direction.lengthSq() > .0001
+    ? impact.direction.clone().normalize()
+    : impactNormal && impactNormal.lengthSq() > .0001
+      ? impactNormal.clone().normalize().negate()
+      : new THREE.Vector3(0, 0, 1);
+  const power = impact?.power ?? 1.8;
+  const impactRadius = Math.max(.2, impact?.radius ?? 1.15);
+  const enemyScale = enemyRoot.group.scale.y || 1;
+  const bodyCenter = new THREE.Vector3(
+    enemyRoot.group.position.x,
+    enemyRoot.group.position.y + 1.25 * enemyScale,
+    enemyRoot.group.position.z
+  );
+
+  // Keep the newest few death bursts only; body debris lives in real time.
+  while (bodyBursts.length >= 4) removeBodyBurst(bodyBursts.shift());
   const shardMat = enemyShardPool.take();
   shardMat.opacity = .77;
-  const shardLightMat = enemyShardLightPool.take();
-  shardLightMat.opacity = .34;
-  const group = new THREE.Group();
   const pieces = [];
-  const hasBodyParts = !!enemyRoot?.hitParts?.some(p => BODY_SHATTER_PARTS.has(p.userData.shatterPart));
-  const count = hasBodyParts ? 22 : enemyRoot?.group ? 46 : 38;
-  const impactCount = hasBodyParts ? 14 : 16;
-  const enemyScale = enemyRoot?.group?.scale.y || 1;
-  const bodyCenter = enemyRoot?.group
-    ? new THREE.Vector3(enemyRoot.group.position.x, enemyRoot.group.position.y + 1.25 * enemyScale, enemyRoot.group.position.z)
-    : point.clone();
-  for (let i = 0; i < count; i++) {
-    const bodyPiece = !!enemyRoot?.group && i >= impactCount;
-    const isChunk = i % 4 === 0;
-    const mesh = new THREE.Mesh(isChunk ? glassChunkGeo : glassPlateGeo, i % 4 === 0 ? shardLightMat : shardMat);
-    if (bodyPiece) {
-      const part = i - impactCount;
-      let x, y;
-      if (part < 10) { x = rand(-.22, .22); y = rand(.98, 1.7); }
-      else if (part < 16) { x = rand(-.14, .14); y = rand(1.78, 2.08); }
-      else if (part < 22) { x = (part % 2 ? 1 : -1) * rand(.27, .48); y = rand(.95, 1.6); }
-      else { x = (part % 2 ? 1 : -1) * rand(.08, .19); y = rand(.14, .94); }
-      mesh.position.set(
-        enemyRoot.group.position.x + x * enemyScale,
-        enemyRoot.group.position.y + y * enemyScale,
-        enemyRoot.group.position.z + rand(-.14, .14) * enemyScale
+  const up = new THREE.Vector3(0, 1, 0);
+
+  enemyRoot.group.updateMatrixWorld(true);
+  const worldPosition = new THREE.Vector3();
+  const worldQuaternion = new THREE.Quaternion();
+  const worldScale = new THREE.Vector3();
+  for (const part of enemyRoot.hitParts) {
+    const partName = part.userData.shatterPart;
+    if (!BODY_SHATTER_PARTS.has(partName)) continue;
+    const templates = BODY_CHUNK_TEMPLATES.get(partName);
+    if (!templates?.length) continue;
+    part.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
+    const partWorldScale = Math.max(.1, (Math.abs(worldScale.x) + Math.abs(worldScale.y) + Math.abs(worldScale.z)) / 3);
+    for (const template of templates) {
+      const offset = template.localOffset.clone().applyQuaternion(worldQuaternion).multiply(worldScale);
+      const position = worldPosition.clone().add(offset);
+      const scale = template.scale.clone().multiply(worldScale);
+      const quaternion = worldQuaternion.clone().multiply(
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(-1.05, 1.05), rand(-1.05, 1.05), rand(-1.05, 1.05)))
       );
-    } else {
-      const scatter = isChunk ? .24 : .13;
-      mesh.position.copy(point).add(new THREE.Vector3(
-        rand(-scatter, scatter),
-        rand(-scatter * .8, scatter * .8),
-        rand(-scatter, scatter)
-      ));
+      const r = position.clone().sub(point);
+      const distance = r.length();
+      const falloff = Math.max(.06, Math.pow(clamp(1 - distance / impactRadius, 0, 1), 2));
+      const radial = distance > .0001 ? r.clone().multiplyScalar(1 / distance) : up.clone();
+      const force = forceDir.clone().multiplyScalar(.78).addScaledVector(radial, .22);
+      if (force.lengthSq() < .0001) force.copy(forceDir);
+      const impulse = force.normalize().multiplyScalar(power * falloff);
+      const mass = Math.max(.18, template.mass * partWorldScale);
+      const velocity = impulse.clone().multiplyScalar(1 / mass);
+      velocity.x += rand(-.18, .18);
+      velocity.y += rand(.08, .42);
+      velocity.z += rand(-.18, .18);
+      const maxExtent = template.maxExtent * partWorldScale;
+      // Large chunks otherwise have too much mass to read as moving under strict
+      // 1/30 time. Only their forward speed along the real impact axis is raised.
+      const largeFactor = THREE.MathUtils.smoothstep(maxExtent, .14, .26);
+      if (largeFactor > .001) {
+        const linearFalloff = clamp(1 - distance / impactRadius, 0, 1);
+        const targetSpeed = (1.2 + linearFalloff * 2.8) * largeFactor;
+        const along = velocity.dot(forceDir);
+        if (along < targetSpeed) velocity.addScaledVector(forceDir, targetSpeed - along);
+      }
+      const torque = new THREE.Vector3().crossVectors(r, impulse);
+      const angularVelocity = torque.multiplyScalar(template.invInertia * .20);
+      angularVelocity.add(new THREE.Vector3(rand(-.8, .8), rand(-.8, .8), rand(-.8, .8)));
+      if (angularVelocity.length() > 14) angularVelocity.setLength(14);
+      // A short, per-shard visual separation makes the body read as broken even
+      // while strict 1/30 physics has barely moved the pieces.
+      const separationDir = forceDir.clone().multiplyScalar(.50)
+        .addScaledVector(radial, .50)
+        .addScaledVector(up, .05)
+        .add(new THREE.Vector3(rand(-.28, .28), rand(0, .16), rand(-.28, .28)));
+      if (separationDir.y < 0) separationDir.y = 0;
+      if (separationDir.lengthSq() < .0001) separationDir.copy(forceDir);
+      separationDir.normalize();
+      const separationDistance = clamp(
+        maxExtent * 2.25 + .10,
+        .18,
+        .48
+      ) * (.60 + falloff * .40);
+      pieces.push({
+        geometry: template.geometry,
+        position, renderPosition: position.clone(), quaternion, scale, velocity, angularVelocity,
+        mass, invInertia: template.invInertia,
+        extent: maxExtent,
+        radius: Math.max(.02, template.radius * partWorldScale),
+        separation: {
+          dir: separationDir, distance: separationDistance,
+          age: 0, duration: .12
+        },
+        id: -1, mesh: null
+      });
     }
-    if (isChunk) {
-      const scale = rand(bodyPiece ? .026 : .012, bodyPiece ? .072 : .042);
-      mesh.scale.set(scale, scale * rand(1.4, 3.6), scale * rand(.7, 1.5));
-    } else {
-      mesh.scale.set(rand(bodyPiece ? 1.3 : .5, bodyPiece ? 2.5 : 1.6), rand(bodyPiece ? 1.2 : .45, bodyPiece ? 2.3 : 1.5), 1);
-    }
-    mesh.rotation.set(rand(0, 6.3), rand(0, 6.3), rand(0, 6.3));
-    const radial = new THREE.Vector3(
-      mesh.position.x - (bodyPiece ? bodyCenter.x : point.x),
-      mesh.position.y - (bodyPiece ? bodyCenter.y : point.y) + rand(.03, .22),
-      mesh.position.z - (bodyPiece ? bodyCenter.z : point.z)
-    ).normalize();
-    const velocity = radial.multiplyScalar(rand(bodyPiece ? 1.4 : .45, bodyPiece ? 4.2 : 3.4))
-      .add(direction.clone().multiplyScalar(rand(.9, 3.2)));
-    mesh.userData.velocity = velocity;
-    mesh.userData.spin = new THREE.Vector3(rand(-14, 14), rand(-14, 14), rand(-14, 14));
-    mesh.userData.gravity = rand(.35, 1.05);
-    group.add(mesh);
-    pieces.push(mesh);
   }
-  if (hasBodyParts) addBodyShards(enemyRoot, point, direction, group, pieces, shardMat);
+  if (!pieces.length) return;
+
+  let group;
+  let batched = null;
+  if (THREE.BatchedMesh) {
+    let vertexCount = 0;
+    for (const piece of pieces) vertexCount += piece.geometry.attributes.position.count;
+    batched = new THREE.BatchedMesh(
+      pieces.length,
+      Math.ceil(vertexCount * 1.05),
+      Math.ceil(vertexCount * 2.1),
+      shardMat
+    );
+    batched.frustumCulled = false;
+    batched.perObjectFrustumCulled = false;
+    const matrix = new THREE.Matrix4();
+    for (const piece of pieces) {
+      piece.id = batched.addGeometry(piece.geometry);
+      matrix.compose(piece.position, piece.quaternion, piece.scale);
+      batched.setMatrixAt(piece.id, matrix);
+    }
+    group = batched;
+  } else {
+    group = new THREE.Group();
+    for (const piece of pieces) {
+      const mesh = new THREE.Mesh(piece.geometry, shardMat);
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.position.copy(piece.position);
+      mesh.quaternion.copy(piece.quaternion);
+      mesh.scale.copy(piece.scale);
+      piece.mesh = mesh;
+      group.add(mesh);
+    }
+  }
   scene.add(group);
 
   const flashMat = enemyFlashPool.take();
@@ -3354,15 +3500,13 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
   ring.quaternion.copy(camera.quaternion);
   scene.add(ring);
 
-  const bodyRingMat = enemyRoot?.group ? enemyBodyRingPool.take() : null;
-  if (bodyRingMat) bodyRingMat.opacity = .4;
-  const bodyRing = bodyRingMat ? new THREE.Mesh(enemyBodyRingGeoS, bodyRingMat) : null;
-  if (bodyRing) {
-    bodyRing.position.copy(bodyCenter);
-    bodyRing.quaternion.copy(camera.quaternion);
-    bodyRing.renderOrder = 5;
-    group.add(bodyRing);
-  }
+  const bodyRingMat = enemyBodyRingPool.take();
+  bodyRingMat.opacity = .4;
+  const bodyRing = new THREE.Mesh(enemyBodyRingGeoS, bodyRingMat);
+  bodyRing.position.copy(bodyCenter);
+  bodyRing.quaternion.copy(camera.quaternion);
+  bodyRing.renderOrder = 5;
+  group.add(bodyRing);
 
   const burstLight = takeBurstLight();
   burstLight.color.setHex(0xff3155);
@@ -3370,19 +3514,19 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
   burstLight.distance = 3.2;
   burstLight.position.copy(point);
 
-  shardGroups.push({
-    group, mat: shardMat, lightMat: shardLightMat, pieces,
+  bodyBursts.push({
+    group, batched, mat: shardMat, pieces,
     flash, flashMat: flash.material,
     ring, bodyRing, ringMat, bodyRingMat,
     light: burstLight,
-    life: 1.35, total: 1.35, burstAge: 0
+    life: 4.0, total: 4.0, burstAge: 0
   });
 }
 
-function damageEnemy(enemy, hitPoint, normal = null) {
+function damageEnemy(enemy, hitPoint, normal = null, impact = null) {
   if (!enemy || !enemy.alive) return false;
   enemy.hp = Math.max(0, enemy.hp - 1);
-  if (enemy.hp === 0) return defeatEnemy(enemy, hitPoint, normal);
+  if (enemy.hp === 0) return defeatEnemy(enemy, hitPoint, normal, impact);
 
   const point = hitPoint || new THREE.Vector3(enemy.group.position.x, 1.5 * enemy.group.scale.y, enemy.group.position.z);
   addImpact(point, normal, 0xffd7de, true);
@@ -3396,14 +3540,17 @@ function damageEnemy(enemy, hitPoint, normal = null) {
   return false;
 }
 
-function defeatEnemy(enemy, hitPoint, normal = null) {
+function defeatEnemy(enemy, hitPoint, normal = null, impact = null) {
   if (!enemy || !enemy.alive) return false;
+  // Capture the loadout before the group/weapon visuals are removed. A future
+  // weapon-drop system can consume this snapshot without touching body shards.
+  enemy.deathDropSpec = enemy.loadout ? { ...enemy.loadout } : null;
   enemy.alive = false;
   enemy.hp = 0;
   const point = hitPoint
     ? hitPoint.clone()
     : new THREE.Vector3(enemy.group.position.x, 1.18 * enemy.group.scale.y, enemy.group.position.z);
-  glassBurstAt(point, normal, enemy);
+  glassBurstAt(point, normal, enemy, impact);
   if (enemy.handGlow) enemy.handGlow.material.opacity = 0;
   enemy.group.visible = false;
   if (enemy.group.parent) enemy.group.parent.remove(enemy.group);
@@ -4543,6 +4690,8 @@ function clearLevelEntities() {
     if (shard.light) { shard.light.intensity = 0; shard.light.visible = false; }
   }
   shardGroups.length = 0;
+  for (const burst of [...bodyBursts]) removeBodyBurst(burst);
+  bodyBursts.length = 0;
   for (const e of [...effects]) {
     if (e.type === 'gunTracer') {
       scene.remove(e.mesh, e.aura, e.head);
@@ -4758,6 +4907,7 @@ function warmSharedShaders() {
   eliteWarm.group.traverse(o => { o.frustumCulled = false; });
   scene.add(warm);
   const preShards = shardGroups.length;
+  const preBodyBursts = bodyBursts.length;
   const preEffects = effects.length;
   glassBurstAt(new THREE.Vector3(-.6, 1.4, 4.2), new THREE.Vector3(0, 0, -1), enemyWarm);
   objectiveBurstAt(new THREE.Vector3(.6, 1.5, 4.2), new THREE.Vector3(0, 0, -1));
@@ -4789,6 +4939,8 @@ function warmSharedShaders() {
     if (s.light) s.light.visible = false;
   }
   shardGroups.length = preShards;
+  for (const s of bodyBursts.slice(preBodyBursts)) removeBodyBurst(s);
+  bodyBursts.length = preBodyBursts;
   for (const e of effects.slice(preEffects)) scene.remove(e.mesh);
   effects.length = preEffects;
   removeObjectiveTarget(warmFinishTarget);
@@ -4963,6 +5115,8 @@ function restartWorld() {
     if (shard.light) { shard.light.intensity = 0; shard.light.visible = false; }
   }
   shardGroups.length = 0;
+  for (const burst of [...bodyBursts]) removeBodyBurst(burst);
+  bodyBursts.length = 0;
   for (const e of [...effects]) {
     if (e.type === 'gunTracer') {
       scene.remove(e.mesh, e.aura, e.head);
@@ -6194,7 +6348,12 @@ function updatePlayerBullets(dt, flow) {
           breakObjective(hitObjective, hit.point, normal);
         } else if (hitEnemy) {
           hits++;
-          damageEnemy(hitEnemy, hit.point, normal);
+          damageEnemy(hitEnemy, hit.point, normal, {
+            direction: b.dir.clone(),
+            power: 1.8,
+            radius: 1.15,
+            source: 'bullet'
+          });
         } else if (hitProjectile) {
           hits++;
           removeProjectile(hitProjectile);
@@ -6416,7 +6575,12 @@ function updateThrownPistol(dt, flow) {
     }
     if (enemyHit && (!worldHit || enemyHit.t <= (worldHit.distance / Math.max(dist, .0001)))) {
       hits++;
-      damageEnemy(enemyHit.enemy, enemyHit.point, dir.clone().negate());
+      damageEnemy(enemyHit.enemy, enemyHit.point, dir.clone().negate(), {
+        direction: dir.clone(),
+        power: 1.4,
+        radius: 1.0,
+        source: 'throw'
+      });
       finishThrownPistol(enemyHit.point);
       return;
     }
@@ -6444,9 +6608,138 @@ function updateThrownPistol(dt, flow) {
   }
 }
 
+function bodyDebrisGroundY(x, z) {
+  const map = window.RED_SHIFT_MAP;
+  if (map?.version === 1 && typeof map.groundHeightAt === 'function') {
+    const y = map.groundHeightAt(x, z);
+    if (Number.isFinite(y)) return y;
+  }
+  return 0;
+}
+
+function resolveBodyDebrisCollision(position, previous, velocity, radius, obstacles) {
+  const r = clamp(radius * .55, .025, .16);
+  for (const c of obstacles) {
+    const bottom = Number.isFinite(c.bottom) ? c.bottom : 0;
+    if (!Number.isFinite(c.top) || c.top <= bottom) continue;
+    if (position.x + r <= c.minX || position.x - r >= c.maxX ||
+        position.z + r <= c.minZ || position.z - r >= c.maxZ ||
+        position.y + r <= bottom || position.y - r >= c.top) continue;
+
+    if (previous.y - r >= c.top - .01 && position.y - r < c.top) {
+      position.y = c.top + r;
+      if (velocity) {
+        velocity.y = Math.abs(velocity.y) * .25;
+        velocity.x *= .7;
+        velocity.z *= .7;
+      }
+      continue;
+    }
+
+    const sides = [
+      { depth: position.x - (c.minX - r), axis: 'x', edge: c.minX - r, sign: -1 },
+      { depth: c.maxX + r - position.x, axis: 'x', edge: c.maxX + r, sign: 1 },
+      { depth: position.z - (c.minZ - r), axis: 'z', edge: c.minZ - r, sign: -1 },
+      { depth: c.maxZ + r - position.z, axis: 'z', edge: c.maxZ + r, sign: 1 }
+    ];
+    let side = sides[0];
+    for (const candidate of sides) if (candidate.depth < side.depth) side = candidate;
+    position[side.axis] = side.edge;
+    if (velocity) velocity[side.axis] = side.sign * Math.abs(velocity[side.axis]) * .28;
+  }
+  const floor = bodyDebrisGroundY(position.x, position.z) + Math.max(.026, Math.min(r, .10));
+  if (position.y < floor) {
+    position.y = floor;
+    if (velocity) {
+      velocity.y = Math.abs(velocity.y) * .3;
+      velocity.x *= .6;
+      velocity.z *= .6;
+    }
+  }
+}
+
+function updateBodyBursts(dt, flow) {
+  // Body debris uses strict simulation time (slow motion included). Lifetime
+  // and the short separation envelope use real time so debris does not hang
+  // around for 30x longer than intended.
+  const motionDt = dt * flow;
+  const spinAxis = new THREE.Vector3();
+  const spinQuat = new THREE.Quaternion();
+  const matrix = new THREE.Matrix4();
+  const map = window.RED_SHIFT_MAP;
+  const obstacles = map?.version === 1 && Array.isArray(map.colliders) ? map.colliders : colliders;
+  for (let i = bodyBursts.length - 1; i >= 0; i--) {
+    const s = bodyBursts[i];
+    s.life -= dt;
+    s.burstAge += dt;
+    const k = clamp(s.life / s.total, 0, 1);
+    const fade = clamp(s.life / .8, 0, 1);
+    s.mat.opacity = .77 * fade;
+    s.flashMat.opacity = .72 * Math.pow(k, 5);
+    s.flash.scale.multiplyScalar(1 + dt * 4);
+    s.ringMat.opacity = .6 * Math.pow(k, 4);
+    s.ring.scale.setScalar(1 + (1 - k) * 5.5);
+    s.ring.quaternion.copy(camera.quaternion);
+    const ringAge = Math.min(1, s.burstAge / .45);
+    s.bodyRing.scale.setScalar(1 + Math.min(1, s.burstAge / .22) * 1.8);
+    s.bodyRingMat.opacity = .4 * (1 - ringAge) ** 2;
+    s.bodyRing.visible = ringAge < 1;
+    s.bodyRing.quaternion.copy(camera.quaternion);
+    s.light.intensity = 5.5 * Math.pow(k, 2.2);
+
+    for (const piece of s.pieces) {
+      const previous = piece.position.clone();
+      piece.velocity.y -= 7.2 * motionDt;
+      piece.position.addScaledVector(piece.velocity, motionDt);
+
+      const spin = piece.angularVelocity;
+      const spinLength = spin.length();
+      if (spinLength > .0001 && motionDt > 0) {
+        spinAxis.copy(spin).multiplyScalar(1 / spinLength);
+        spinQuat.setFromAxisAngle(spinAxis, spinLength * Math.min(motionDt, .05));
+        piece.quaternion.multiply(spinQuat);
+      }
+
+      resolveBodyDebrisCollision(piece.position, previous, piece.velocity, piece.radius, obstacles);
+      if (piece.position.y <= bodyDebrisGroundY(piece.position.x, piece.position.z) + .10)
+        piece.angularVelocity.multiplyScalar(.72);
+
+      let renderPosition = piece.position;
+      if (piece.separation) {
+        const sep = piece.separation;
+        sep.age += dt;
+        const t = clamp(sep.age / sep.duration, 0, 1);
+        const ease = 1 - Math.pow(1 - t, 3);
+        renderPosition = piece.position.clone().addScaledVector(sep.dir, sep.distance * ease);
+        resolveBodyDebrisCollision(renderPosition, piece.position, null, piece.radius, obstacles);
+        if (t >= 1) {
+          piece.position.addScaledVector(sep.dir, sep.distance);
+          resolveBodyDebrisCollision(piece.position, previous, piece.velocity, piece.radius, obstacles);
+          piece.separation = null;
+          renderPosition = piece.position;
+        }
+      }
+
+      piece.renderPosition = renderPosition;
+      if (s.batched) {
+        matrix.compose(renderPosition, piece.quaternion, piece.scale);
+        s.batched.setMatrixAt(piece.id, matrix);
+      } else if (piece.mesh) {
+        piece.mesh.position.copy(renderPosition);
+        piece.mesh.quaternion.copy(piece.quaternion);
+      }
+    }
+
+    if (s.life <= 0) {
+      removeBodyBurst(s);
+      bodyBursts.splice(i, 1);
+    }
+  }
+}
+
 function updateShards(dt, flow) {
-  // Shards, opacity, ring and light decay run on simulation time. A tiny motion
-  // floor keeps them alive visually while still letting them disappear (sim life).
+  updateBodyBursts(dt, flow);
+  // Objective/glass VFX retain their original simulation-time behavior.
   const simDt = dt * flow;
   // Near-frozen world: shards should hang almost still, not travel at 1/30×.
   for (let i = shardGroups.length - 1; i >= 0; i--) {
@@ -6495,7 +6788,7 @@ function updateShards(dt, flow) {
     }
   }
   for (const light of burstLightPool) {
-    if (shardGroups.some(s => s.light === light)) light.visible = true;
+    if (bodyBursts.some(s => s.light === light) || shardGroups.some(s => s.light === light)) light.visible = true;
   }
 }
 
@@ -6984,7 +7277,21 @@ window.__REDSHIFT__ = {
   get renderStats() { return { programs: renderer.info.programs?.length || 0, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }; },
   get colliderStats() { return { total: colliders.length, missingTop: colliders.filter(c => c.top === undefined).length, high: colliders.filter(c => c.top >= 1.5).length }; },
   get shardStats() { return { count: shardGroups.length, samples: shardGroups.flatMap(s => s.pieces.slice(0, 3).map(p => ({ x: +p.position.x.toFixed(3), y: +p.position.y.toFixed(3), z: +p.position.z.toFixed(3) }))), life: shardGroups.map(s => +s.life.toFixed(3)) }; },
-  get effectStats() { return { effects: effects.length, shards: shardGroups.length, lights: burstLightPool.filter(l => l.intensity > 0).length }; },
+  get bodyDebris() {
+    return {
+      bursts: bodyBursts.length,
+      pieces: bodyBursts.reduce((n, s) => n + s.pieces.length, 0),
+      life: bodyBursts.map(s => +s.life.toFixed(3)),
+      batched: bodyBursts.map(s => !!s.batched),
+      samples: bodyBursts.flatMap(s => s.pieces.slice(0, 4).map(p => ({
+        x: +p.position.x.toFixed(3), y: +p.position.y.toFixed(3), z: +p.position.z.toFixed(3),
+        rx: +p.renderPosition.x.toFixed(3), ry: +p.renderPosition.y.toFixed(3), rz: +p.renderPosition.z.toFixed(3),
+        vx: +p.velocity.x.toFixed(2), vy: +p.velocity.y.toFixed(2), vz: +p.velocity.z.toFixed(2),
+        mass: +p.mass.toFixed(2), extent: +(p.extent || 0).toFixed(3)
+      })))
+    };
+  },
+  get effectStats() { return { effects: effects.length, shards: shardGroups.length, bodyBursts: bodyBursts.length, lights: burstLightPool.filter(l => l.intensity > 0).length }; },
   get assets() { return { enemy: !!GAME_ASSETS.enemyGeos.torso, pistolFrame: GAME_ASSETS.pistolFrame.length, pistolSlide: GAME_ASSETS.pistolSlide.length, enemyGun: !!GAME_ASSETS.enemyGeos.enemy_gun, eliteRifle: !!GAME_ASSETS.rifleObject, eliteFace: !!GAME_ASSETS.enemyFace, shotgun: !!GAME_ASSETS.shotgunObject }; },
   get campaign() { return { phase: campaign.phase, wave: campaign.level, completedWaves: campaign.completedWaves, maxWaves: MAX_WAVES, eliteKills, shotgunUnlocked, currentWeapon, totalSpawned: campaign.totalSpawned, roomTitle: campaign.roomTitle, countdown: waveCountdown }; },
   get room() { return { title: campaign.roomTitle, name: ROOMS.current?.name, visible: ROOMS.levels.filter(r => r.group.visible).map(r => r.title), randomCovers: ROOMS.current?.randomColliders?.length || 0 }; },
@@ -6998,6 +7305,15 @@ window.__REDSHIFT__ = {
   shootNow() { shoot(); },
   get objectives() { return objectiveTargets.map(t => ({ kind: t.kind, active: t.active, x: +t.group.position.x.toFixed(2), y: +t.group.position.y.toFixed(2), z: +t.group.position.z.toFixed(2) })); },
   killAll() { for (const e of [...activeEnemies]) if (e.alive) defeatEnemy(e, new THREE.Vector3(e.group.position.x, 1.18 * e.group.scale.y, e.group.position.z), null); },
+  shatter(index = 0, direction = [0, 0, -1]) {
+    const e = activeEnemies.filter(x => x.alive)[index];
+    if (!e) return false;
+    defeatEnemy(e, new THREE.Vector3(e.group.position.x, 1.18 * e.group.scale.y, e.group.position.z), null, {
+      direction: new THREE.Vector3(direction[0], direction[1], direction[2]).normalize(),
+      power: 1.8, radius: 1.15, source: 'debug'
+    });
+    return true;
+  },
   breakNow() { const t = objectiveTargets.find(o => o.active); if (t) breakObjective(t, t.group.position.clone(), null); },
   hitPlayer() { playerHit(); },
   enemyFire(index = 0) { activeEnemies[index]?.firePistol(camera.position); },

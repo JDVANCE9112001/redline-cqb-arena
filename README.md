@@ -3,7 +3,9 @@
 A browser 3D survival FPS. Time slows to 1/30 speed while the player stands still.
 Survive eight waves to win. Rifle elites wear a face sticker and require two hits.
 Defeating three elites unlocks a shotgun that fires sixteen pellets in a disc spread.
-On death, enemies break into glass shards and body-shaped fragments.
+On death, enemies break into directional, physics-driven glass fragments.
+
+Map and gameplay integration contract: [MAP_GAMEPLAY_CONTRACT.md](MAP_GAMEPLAY_CONTRACT.md).
 
 Controls: WASD to move, mouse to aim, left click to fire, Q or right click to throw
 the pistol, 1/2 to switch weapons, Escape to pause, R to restart, and M to mute.
