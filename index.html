@@ -2569,6 +2569,7 @@ class Enemy {
       const geo = geos[name];
       if (!geo) return null;
       const mesh = new THREE.Mesh(geo, material);
+      mesh.userData.shatterPart = name;
       mesh.position.y = y;
       mesh.castShadow = true;
       mesh.receiveShadow = false;
@@ -3210,6 +3211,70 @@ function newGlassShardMaterial() {
   });
 }
 
+const bodyShardBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+const bodyShardLimbGeo = new THREE.CylinderGeometry(1, 1, 1, 7);
+const bodyShardHeadGeo = new THREE.IcosahedronGeometry(1, 0);
+const BODY_SHATTER_PARTS = new Set([
+  'torso', 'head', 'upper_arm_l', 'upper_arm_r', 'forearm_l', 'forearm_r',
+  'thigh_l', 'thigh_r', 'shin_l', 'shin_r'
+]);
+
+function addBodyShards(enemy, point, direction, group, pieces, material) {
+  if (!enemy?.hitParts) return;
+  enemy.group.updateMatrixWorld(true);
+  const worldPosition = new THREE.Vector3();
+  const worldRotation = new THREE.Quaternion();
+  const worldScale = new THREE.Vector3();
+  const localCenter = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  const bodyCenter = enemy.group.localToWorld(new THREE.Vector3(0, 1.1, 0));
+  for (const part of enemy.hitParts) {
+    const name = part.userData.shatterPart;
+    if (!BODY_SHATTER_PARTS.has(name)) continue;
+    if (!part.geometry.boundingBox) part.geometry.computeBoundingBox();
+    const box = part.geometry.boundingBox;
+    box.getCenter(localCenter);
+    box.getSize(size);
+    part.matrixWorld.decompose(worldPosition, worldRotation, worldScale);
+    const sections = name === 'torso' ? 9 : name === 'head' ? 5 : 2;
+    for (let i = 0; i < sections; i++) {
+      const piece = new THREE.Mesh(
+        name === 'torso' ? bodyShardBoxGeo : name === 'head' ? bodyShardHeadGeo : bodyShardLimbGeo,
+        material
+      );
+      const center = localCenter.clone();
+      if (name === 'torso') {
+        center.x += (i % 3 - 1) * size.x / 3;
+        center.y += (Math.floor(i / 3) - 1) * size.y / 3;
+        piece.scale.set(size.x * .30, size.y * .30, size.z * .88);
+      } else if (name === 'head') {
+        const offsets = [[0, .28, 0], [-.28, 0, .16], [.28, 0, .16], [0, -.26, .15], [0, 0, -.27]];
+        const o = offsets[i];
+        center.add(new THREE.Vector3(o[0] * size.x, o[1] * size.y, o[2] * size.z));
+        piece.scale.setScalar(Math.min(size.x, size.y, size.z) * .32);
+      } else {
+        center.y += (i ? .25 : -.25) * size.y;
+        const radius = Math.max(.018, Math.min(size.x, size.z) * .44);
+        piece.scale.set(radius, size.y * .46, radius);
+      }
+      piece.scale.multiply(worldScale);
+      piece.position.copy(center.applyMatrix4(part.matrixWorld));
+      piece.quaternion.copy(worldRotation);
+      const radial = piece.position.clone().sub(bodyCenter);
+      radial.y += rand(.1, .45);
+      if (radial.lengthSq() < .001) radial.set(0, 1, 0);
+      piece.userData.velocity = radial.normalize().multiplyScalar(rand(1.3, 3.4))
+        .addScaledVector(direction, rand(1.8, 3.7));
+      piece.userData.spin = new THREE.Vector3(rand(-9, 9), rand(-9, 9), rand(-9, 9));
+      piece.userData.gravity = rand(.8, 1.25);
+      piece.castShadow = false;
+      piece.receiveShadow = false;
+      group.add(piece);
+      pieces.push(piece);
+    }
+  }
+}
+
 // A dense, localized glass detonation at the exact surface that was hit.
 function glassBurstAt(point, impactNormal, enemyRoot) {
   const direction = (impactNormal && impactNormal.lengthSq() > .001)
@@ -3221,8 +3286,9 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
   shardLightMat.opacity = .34;
   const group = new THREE.Group();
   const pieces = [];
-  const count = enemyRoot?.group ? 46 : 38;
-  const impactCount = 16;
+  const hasBodyParts = !!enemyRoot?.hitParts?.some(p => BODY_SHATTER_PARTS.has(p.userData.shatterPart));
+  const count = hasBodyParts ? 22 : enemyRoot?.group ? 46 : 38;
+  const impactCount = hasBodyParts ? 14 : 16;
   const enemyScale = enemyRoot?.group?.scale.y || 1;
   const bodyCenter = enemyRoot?.group
     ? new THREE.Vector3(enemyRoot.group.position.x, enemyRoot.group.position.y + 1.25 * enemyScale, enemyRoot.group.position.z)
@@ -3271,6 +3337,7 @@ function glassBurstAt(point, impactNormal, enemyRoot) {
     group.add(mesh);
     pieces.push(mesh);
   }
+  if (hasBodyParts) addBodyShards(enemyRoot, point, direction, group, pieces, shardMat);
   scene.add(group);
 
   const flashMat = enemyFlashPool.take();
