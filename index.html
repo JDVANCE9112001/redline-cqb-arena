@@ -4125,7 +4125,7 @@ const campaign = {
   firstLevelFromStart: true
 };
 const MAX_WAVES = 8;
-const LEVEL_COUNTS = [null, [1, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9], [8, 9], [9, 10]];
+const LEVEL_COUNTS = [null, [2, 5], [4, 6], [5, 7], [6, 8], [7, 9], [8, 10], [9, 10], [10, 11]];
 // Stage 3 enemy tuning. 7A: burst gap 1.0 s -> 0.6 s, 2-3 rounds at .12 s.
 const ENEMY_LEVELS = [
   null,
@@ -5713,7 +5713,7 @@ function onAllEnemiesDown() {
 const sound = {
   ctx: null, master: null, muted: false, hum: null,
   bgm: new Audio('audio/guardians-bgm.mp3'),
-  samples: { gunshot: null, glass: null, enemyShot: null, hit: null, kill: null }, samplesLoading: false,
+  samples: { gunshot: null, glass: null, enemyShot: null, hit: null, kill: null, pickup: null }, samplesLoading: false,
   init() {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -5750,8 +5750,8 @@ const sound = {
       const bytes = await response.arrayBuffer();
       return new Promise((resolve, reject) => this.ctx.decodeAudioData(bytes, resolve, reject));
     };
-    const names = ['gunshot', 'glass', 'enemyShot', 'hit', 'kill'];
-    const paths = ['audio/player-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3'];
+    const names = ['gunshot', 'glass', 'enemyShot', 'hit', 'kill', 'pickup'];
+    const paths = ['audio/player-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3', 'audio/weapon-pickup.mp3'];
     const results = await Promise.allSettled(paths.map(load));
     results.forEach((result, i) => { if (result.status === 'fulfilled') this.samples[names[i]] = result.value; });
   },
@@ -5859,6 +5859,7 @@ const sound = {
   },
   pickup() {
     if (!this.active()) return;
+    if (this.playSample('pickup', .9, 1.0)) return;
     this.tone(620, 1180, .07, 'triangle', .03);
     setTimeout(() => { if (this.active()) this.tone(1180, 1480, .06, 'sine', .018); }, 55);
   },
@@ -6631,7 +6632,7 @@ function applyShotSpread(dir, degrees) {
   return dir.normalize();
 }
 
-function shoot() {
+function shoot(fromHeldAutoFire = false) {
   if (gameState !== 'playing' || !isLocked) return;
   if (currentWeapon === 'shotgun') { fireShotgun(); return; }
   const def = WEAPON_DEFS[equippedWeapon.kind];
@@ -6642,9 +6643,12 @@ function shoot() {
     setWeaponHud();
     return;
   }
-  // Buffer a quick tap until the weapon's real-time cadence is ready.
-  // This prevents a short click inside the cooldown window from disappearing.
-  if (performance.now() - lastShotRealAt < def.interval * 1000) { shotQueued = true; return; }
+  // Buffer an actual click during cooldown, but never let an auto-fire frame
+  // create a second queued shot after the initial mousedown shot.
+  if (performance.now() - lastShotRealAt < def.interval * 1000) {
+    if (!fromHeldAutoFire) shotQueued = true;
+    return;
+  }
   if (runElapsed - lastShotSim > .45) shotStreak = 0;
   camera.updateMatrixWorld(true);
   scene.updateMatrixWorld(true);
@@ -7727,7 +7731,7 @@ function animate() {
     updateWeaponDrops();
     updateShotgunReload();
     const autoFire = fireHeld && (currentWeapon === 'mac10' || currentWeapon === 'rifle');
-    if ((autoFire || shotQueued) && isLocked) shoot();
+    if ((autoFire || shotQueued) && isLocked) shoot(autoFire);
     if (campaign.phase === 'WAVE_BREAK') {
       const previousSecond = Math.ceil(waveCountdown);
       waveCountdown = Math.max(0, waveCountdown - dt);
