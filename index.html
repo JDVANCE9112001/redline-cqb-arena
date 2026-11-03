@@ -3986,6 +3986,7 @@ function tryPickupWeapon() {
 
 function damageEnemy(enemy, hitPoint, normal = null, impact = null) {
   if (!enemy || !enemy.alive) return false;
+  if (impact?.source === 'throw') enemy.hp = 1;
   const headshot = !!(enemy.elite && (impact?.headshot || (hitPoint && hitPoint.y >= enemy.group.position.y + 1.76 * enemy.group.scale.y)));
   if (headshot) enemy.hp = 0;
   else enemy.hp = Math.max(0, enemy.hp - 1);
@@ -5487,8 +5488,8 @@ function updateEnemyHud() {
 }
 
 function updateWeaponVisibility() {
-  if (weapons) weapons.rig.visible = currentWeapon !== 'shotgun';
-  if (shotgunView) shotgunView.rig.visible = currentWeapon === 'shotgun';
+  if (weapons) weapons.rig.visible = pistolArmed && currentWeapon !== 'shotgun';
+  if (shotgunView) shotgunView.rig.visible = pistolArmed && currentWeapon === 'shotgun';
 }
 
 function applyViewWeaponModel(kind) {
