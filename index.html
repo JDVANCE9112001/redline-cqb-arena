@@ -109,6 +109,9 @@ body.playing #crosshair{opacity:1}
 #kill-confirm{position:absolute;left:50%;top:calc(50% + 31px);transform:translate(-50%,5px);opacity:0;color:#f4fbff;font-size:8px;font-weight:700;letter-spacing:.24em;text-shadow:0 1px 8px rgba(0,0,0,.8);transition:opacity .12s,transform .12s;white-space:nowrap}
 #kill-confirm.show{opacity:1;transform:translate(-50%,0)}
 #kill-confirm.headshot{color:#8ef0ff;text-shadow:0 0 12px rgba(101,232,255,.8),0 1px 5px rgba(0,0,0,.8)}
+#threat-arrow{position:absolute;left:calc(50% + var(--threat-x,0px));top:calc(50% + var(--threat-y,-72px));transform:translate(-50%,-50%) rotate(var(--threat-angle,0deg));opacity:0;color:#ffb36b;font-size:17px;line-height:1;text-shadow:0 0 10px rgba(255,106,61,.85),0 1px 4px #071525;pointer-events:none;transition:opacity .12s,color .12s}
+#threat-arrow.visible{opacity:.92}
+#threat-arrow.danger{color:#ff3b59;animation:threatPulse .32s ease-in-out infinite alternate}
 
 /* lower HUD */
 .elapsed-clock{position:absolute;left:31px;bottom:99px;display:flex;align-items:flex-end;gap:10px;padding:7px 12px 6px;border-left:2px solid rgba(255,36,77,.72);background:linear-gradient(90deg,rgba(4,15,26,.66),rgba(4,15,26,.06));color:#c6e8f6;text-shadow:0 1px 6px rgba(0,0,0,.75)}
@@ -429,6 +432,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
   </div>
   <div id="hitmarker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="kill-confirm" aria-hidden="true">TARGET SHATTERED</div>
+  <div id="threat-arrow" aria-hidden="true">▲</div>
 
   <div class="elapsed-clock" aria-label="实际流逝时间">
     <span>流逝时间 / ELAPSED</span>
@@ -4005,7 +4009,8 @@ const ui = {
   start: $('#start'), pause: $('#pause'), end: $('#end'), loading: $('#loading'),
   enemyCount: $('#enemy-count'), pips: $('#pips'), runTime: $('#run-time'), elapsedTime: $('#elapsed-time'),
   flowFill: $('#flow-fill'), flowLabel: $('#flow-label'), telemetry: $('#telemetry'),
-  crosshair: $('#crosshair'), hitmarker: $('#hitmarker'), killConfirm: $('#kill-confirm'), damage: $('#damage-flash'),
+  crosshair: $('#crosshair'), hitmarker: $('#hitmarker'), killConfirm: $('#kill-confirm'),
+  threatArrow: $('#threat-arrow'), damage: $('#damage-flash'),
   toast: $('#toast'), audioBtn: $('#audio-btn'), audioLabel: $('#audio-label'),
   weaponReadout: $('#weapon-readout'), weaponTopLabel: $('#weapon-top-label'),
   weaponState: $('#weapon-state'), weaponHint: $('#weapon-hint'),
@@ -6987,13 +6992,24 @@ function updateProjectiles(dt, flow) {
   const simDt = dt * flow;
   if (dt <= 0) return;
   let closestThreat = Infinity;
+  let closestThreatAngle = 0;
+  const considerThreat = (position, distance) => {
+    if (distance >= closestThreat) return;
+    closestThreat = distance;
+    const dx = position.x - camera.position.x;
+    const dz = position.z - camera.position.z;
+    const sin = Math.sin(camera.rotation.y), cos = Math.cos(camera.rotation.y);
+    const screenX = dx * cos - dz * sin;
+    const screenForward = -dx * sin - dz * cos;
+    closestThreatAngle = Math.atan2(screenX, screenForward);
+  };
   for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
     const p = enemyProjectiles[i];
     const group = p.group || p.mesh;
     p.realLife = (p.realLife ?? 5.0) - dt;
     if (p.realLife <= 0) { removeProjectile(p); continue; }
     if (simDt <= 0) {
-      closestThreat = Math.min(closestThreat, group.position.distanceTo(camera.position));
+      considerThreat(group.position, group.position.distanceTo(camera.position));
       continue;
     }
     p.life -= simDt;
@@ -7030,6 +7046,17 @@ function updateProjectiles(dt, flow) {
     }
   }
   setHitboxThreat(closestThreat);
+  const hasNearbyThreat = gameState === 'playing' && closestThreat < 4.8;
+  if (ui.threatArrow) {
+    const arrowRadius = 72;
+    ui.threatArrow.classList.toggle('visible', hasNearbyThreat);
+    ui.threatArrow.classList.toggle('danger', closestThreat < 1.25);
+    if (hasNearbyThreat) {
+      ui.threatArrow.style.setProperty('--threat-angle', `${closestThreatAngle}rad`);
+      ui.threatArrow.style.setProperty('--threat-x', `${Math.sin(closestThreatAngle) * arrowRadius}px`);
+      ui.threatArrow.style.setProperty('--threat-y', `${-Math.cos(closestThreatAngle) * arrowRadius}px`);
+    }
+  }
 }
 
 /* --------------------------------------------------------------------------
