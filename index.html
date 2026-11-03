@@ -1897,13 +1897,9 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Quaternius pistol unavailable; loading original sidearm.', error);
   }
   try {
-    const gltf = await loader.loadAsync('assets/models/revolver.glb');
-    let revolver = gltf.scene.getObjectByName('revolver_with_longass_name_0');
-    if (!revolver) gltf.scene.traverse(obj => { if (!revolver && /revolver/i.test(obj.name)) revolver = obj; });
-    assets.revolverObject = revolver || gltf.scene;
+    assets.revolverObject = (await loader.loadAsync('assets/models/Revolver_Stealth_Hunter.glb')).scene;
   } catch (error) {
-    try { assets.revolverObject = (await loader.loadAsync('assets/models/Revolver_Stealth_Hunter.glb')).scene; }
-    catch { console.warn('[RED SHIFT] Revolver GLB unavailable; using the existing sidearm model.', error); }
+    console.warn('[RED SHIFT] Revolver GLB unavailable; using the existing sidearm model.', error);
   }
   try {
     assets.mac10Object = (await loader.loadAsync('assets/models/MAC10.glb')).scene;
@@ -1927,11 +1923,6 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Elite rifle unavailable; using simplified rifle.', error);
   }
   try {
-    assets.shotgunObject = (await loader.loadAsync('assets/models/shotgun-m1014.glb')).scene;
-    assets.shotgunObject.userData.m1014 = true;
-    assets.shotgunObject.traverse(obj => { if (obj.isMesh) { obj.castShadow = false; obj.receiveShadow = false; obj.frustumCulled = false; } });
-  } catch (modelError) {
-    try {
     assets.shotgunObject = await new OBJLoader().loadAsync('assets/models/Shotgun_NoStock.obj');
     const shades = { Black: 0x0b1118, DarkMetal: 0x1c2932, DarkWood: 0x49342d, Metal: 0x667985, Wood: 0x684439 };
     const mats = Object.fromEntries(Object.entries(shades).map(([name, color]) => [name,
@@ -1944,9 +1935,8 @@ async function loadGameAssets() {
       obj.castShadow = false;
       obj.receiveShadow = false;
     });
-    } catch (error) {
-      console.warn('[RED SHIFT] Shotgun models unavailable; using simplified shotgun.', error || modelError);
-    }
+  } catch (error) {
+    console.warn('[RED SHIFT] Shotgun model unavailable; using simplified shotgun.', error);
   }
   try {
     assets.enemyFace = await new THREE.TextureLoader().loadAsync('assets/enemy-face.png');
@@ -1977,14 +1967,13 @@ function buildShotgun() {
   const rig = new THREE.Group();
   camera.add(rig);
   const gun = new THREE.Group();
-  gun.position.set(.25, -.17, -.48);
+  gun.position.set(.37, -.34, -.22);
   gun.rotation.set(-.025, 0, .008);
   rig.add(gun);
   if (GAME_ASSETS.shotgunObject) {
     const model = GAME_ASSETS.shotgunObject.clone(true);
-    const m1014 = !!GAME_ASSETS.shotgunObject.userData.m1014;
-    model.scale.setScalar(m1014 ? .20 : .23);
-    model.rotation.y = m1014 ? Math.PI : Math.PI / 2;
+    model.scale.setScalar(.23);
+    model.rotation.y = Math.PI / 2;
     gun.add(model);
   } else {
     const dark = new THREE.MeshStandardMaterial({ color: 0x17212a, metalness: .35, roughness: .58 });
@@ -1996,7 +1985,7 @@ function buildShotgun() {
     gun.add(barrel, stock);
   }
   const muzzleAnchor = new THREE.Object3D();
-  muzzleAnchor.position.set(0, .015, -.28);
+  muzzleAnchor.position.set(0, .015, -.94);
   gun.add(muzzleAnchor);
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd5a6, transparent: true, opacity: .95, depthWrite: false, side: THREE.DoubleSide });
   const flashGroup = new THREE.Mesh(new THREE.PlaneGeometry(.24, .24), flashMat);
@@ -2814,21 +2803,13 @@ class Enemy {
     if (this.gun) this.gun.visible = false;
     const gunMat = enemyAssetGunMat;
     const gun = new THREE.Group();
-    const isM1014 = this.loadout.kind === 'shotgun' && !!GAME_ASSETS.shotgunObject?.userData.m1014;
-    gun.position.set(isM1014 ? .30 : 0, isM1014 ? .18 : -.015, isM1014 ? .24 : .03);
-    if (isM1014) gun.rotation.y = .20;
+    gun.position.set(0, -.015, .03);
     const weaponSource = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
       : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
         : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
-    const weaponVisual = isM1014
-      ? GAME_ASSETS.shotgunObject.clone(true)
-      : centeredWeaponModel(weaponSource, .53, -Math.PI / 2);
+    const weaponVisual = centeredWeaponModel(weaponSource, .53, -Math.PI / 2);
     if (weaponVisual) {
-      if (isM1014) {
-        weaponVisual.scale.setScalar(.20);
-        weaponVisual.rotation.y = Math.PI;
-        weaponVisual.position.set(0, -.015, .02);
-      } else weaponVisual.position.set(0, .015, .07);
+      weaponVisual.position.set(0, .015, .07);
       gun.add(weaponVisual);
     } else if (geos.enemy_gun) {
       gun.scale.setScalar(1.2);
@@ -2839,7 +2820,7 @@ class Enemy {
     this.arms[1].hand.add(gun);
     this.gun = gun;
     this.gunMuzzle = new THREE.Object3D();
-    this.gunMuzzle.position.set(0, .02, isM1014 ? .29 : weaponVisual ? .36 : .178);
+    this.gunMuzzle.position.set(0, .02, weaponVisual ? .36 : .178);
     gun.add(this.gunMuzzle);
     this.handGlow = addGlow(this.gunMuzzle, 0, 0, 0, .4, .4, 0xff2f50, .0, handGlowPool.take());
 
@@ -3290,6 +3271,7 @@ class Enemy {
     this.group.updateMatrixWorld(true);
     const start = new THREE.Vector3();
     this.gunMuzzle.getWorldPosition(start);
+    sound.enemyShot();
     addMuzzleFlash(start, 0xffb08a);
     const target = playerPos.clone();
     target.y = playerPos.y - .04;
@@ -3302,7 +3284,6 @@ class Enemy {
 
     const dirs = [dir];
     if (this.loadout.kind === 'shotgun') {
-      sound.enemyShotgun(start);
       dirs.length = 0;
       const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
       const up = new THREE.Vector3().crossVectors(right, dir).normalize();
@@ -3313,9 +3294,6 @@ class Enemy {
         const radius = Math.sqrt((i + .5) / SHOTGUN_PELLETS) * spread;
         dirs.push(dir.clone().addScaledVector(right, Math.cos(a) * radius).addScaledVector(up, Math.sin(a) * radius).normalize());
       }
-      setTimeout(() => sound.enemyShotgunReload(start), 120);
-    } else {
-      sound.enemyShot(start);
     }
     for (const shotDir of dirs) {
       if (enemyProjectiles.length >= 96) removeProjectile(enemyProjectiles[0]);
@@ -3810,21 +3788,9 @@ function spawnWeaponDrop(spec, x, z, { expiresIn = 30000, replace = false } = {}
   const root = new THREE.Group();
   root.position.set(spot.x, y, spot.z);
   root.rotation.y = Math.random() * Math.PI * 2;
-    let visual;
-    if (spec.kind === 'shotgun' && GAME_ASSETS.shotgunObject) {
-      const model = GAME_ASSETS.shotgunObject.clone(true);
-      const m1014 = !!GAME_ASSETS.shotgunObject.userData.m1014;
-      model.scale.setScalar(m1014 ? .18 : .12);
-      model.rotation.y = m1014 ? Math.PI : Math.PI / 2;
-      model.position.set(0, -.02, m1014 ? .04 : .05);
-      visual = new THREE.Group();
-      visual.add(model);
-      visual.rotation.z = Math.PI / 2;
-    } else {
-      visual = centeredWeaponModel(weaponModelSource(spec.kind), .56, Math.PI / 2);
-      if (visual) visual.rotation.x = Math.PI / 2;
-    }
+  const visual = centeredWeaponModel(weaponModelSource(spec.kind), spec.kind === 'shotgun' ? .68 : .56, Math.PI / 2);
   if (visual) {
+    visual.rotation.x = Math.PI / 2;
     visual.position.y = .02;
     root.add(visual);
   } else {
@@ -3952,7 +3918,7 @@ function defeatEnemy(enemy, hitPoint, normal = null, impact = null) {
     eliteKills++;
   }
   setWeaponHud();
-  sound.killFeedback(point);
+  sound.killFeedback();
   for (const other of activeEnemies) {
     if (other === enemy || !other.alive) continue;
     if (other.group.position.distanceTo(enemy.group.position) < 11) other.alertFromAlly(point);
@@ -5484,7 +5450,6 @@ function startShotgunReload(def = WEAPON_DEFS.shotgun) {
   shotgunReloadUntil = runElapsed + (def.reloadTime || .65);
   shotgunReloadHudActive = true;
   setWeaponHud();
-  sound.shotgunReload();
 }
 
 function updateShotgunReload() {
@@ -5723,7 +5688,7 @@ function onAllEnemiesDown() {
 const sound = {
   ctx: null, master: null, muted: false, hum: null,
   bgm: new Audio('audio/guardians-bgm.mp3'),
-  samples: { revolverShot: null, revolverEmpty: null, shotgunShot: null, shotgunReload: null, gunEmpty: null, glass: null, hit: null, kill: null }, samplesLoading: false,
+  samples: { gunshot: null, glass: null, enemyShot: null, hit: null, kill: null }, samplesLoading: false,
   init() {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -5760,17 +5725,10 @@ const sound = {
       const bytes = await response.arrayBuffer();
       return new Promise((resolve, reject) => this.ctx.decodeAudioData(bytes, resolve, reject));
     };
-    const names = ['revolverShot', 'revolverEmpty', 'shotgunShot', 'shotgunReload', 'gunEmpty', 'glass', 'hit', 'kill'];
-    const paths = [
-      'audio/revolver-shot-first.wav', 'audio/revolver-empty-first.wav',
-      'audio/shotgun-shot-first.wav', 'audio/153560__splicesound__winchester-rifle-cock-reload.wav',
-      'audio/858445__smillandwelson__p38-slide-release-1-empty.mp3',
-      'audio/objective-break.mp3', 'audio/enemy-hit.mp3', 'audio/glass-death-4s.wav'
-    ];
-    await Promise.allSettled(names.map(async (name, i) => {
-      try { this.samples[name] = await load(paths[i]); }
-      catch (error) { console.warn(`[RED SHIFT] sound unavailable: ${paths[i]}`, error); }
-    }));
+    const names = ['gunshot', 'glass', 'enemyShot', 'hit', 'kill'];
+    const paths = ['audio/player-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3'];
+    const results = await Promise.allSettled(paths.map(load));
+    results.forEach((result, i) => { if (result.status === 'fulfilled') this.samples[names[i]] = result.value; });
   },
   playSample(key, gain = 1, rate = 1, delay = 0) {
     if (!this.active() || !this.samples[key]) return false;
@@ -5783,20 +5741,6 @@ const sound = {
     src.connect(g);
     g.connect(this.master);
     src.start(now);
-    return true;
-  },
-  playSampleSpatial(key, position, gain = 1, rate = 1) {
-    if (!this.active() || !this.samples[key] || !position) return false;
-    const dx = position.x - camera.position.x, dy = position.y - camera.position.y, dz = position.z - camera.position.z;
-    const distance = Math.max(.001, Math.hypot(dx, dy, dz));
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-    const panner = this.ctx.createStereoPanner();
-    panner.pan.value = THREE.MathUtils.clamp((dx * right.x + dy * right.y + dz * right.z) / distance, -1, 1) * .72;
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'lowpass'; filter.frequency.value = Math.max(1300, 9000 / (1 + distance * .08));
-    const src = this.ctx.createBufferSource(); src.buffer = this.samples[key]; src.playbackRate.value = rate;
-    const g = this.ctx.createGain(); g.gain.value = Math.max(.045, gain / (1 + distance * .16));
-    src.connect(g); g.connect(filter); filter.connect(panner); panner.connect(this.master); src.start();
     return true;
   },
   makeNoise() {
@@ -5833,15 +5777,14 @@ const sound = {
   },
   shotgunShot() {
     if (!this.active()) return;
-    const recorded = this.playSample('shotgunShot', 1.0, 1.0);
-    if (recorded) return;
+    this.playSample('gunshot', .92, .72);
     this.noiseBurst(680, .20, .21, 'lowpass');
     this.noiseBurst(2600, .075, .05, 'highpass');
     this.tone(110, 38, .25, 'triangle', .07);
   },
   pistolShot() {
     if (!this.active()) return;
-    const recorded = this.playSample('revolverShot', 1.0, 1.0);
+    const recorded = this.playSample('gunshot', 1.0, .93);
     if (recorded) {
       this.noiseBurst(2800, .04, .018, 'highpass');
       this.tone(160, 48, .17, 'triangle', .045);
@@ -5876,34 +5819,13 @@ const sound = {
     }
     if (!recorded) this.tone(255, 62, .2, 'triangle', .03);
   },
-  enemyShot(position = null) {
+  enemyShot() {
     if (!this.active()) return;
-    const recorded = position
-      ? this.playSampleSpatial('revolverShot', position, .58, 1.0)
-      : this.playSample('revolverShot', .32, 1.0);
+    const recorded = this.playSample('enemyShot', .45, 1.0);
     if (recorded) return;
     this.noiseBurst(2400, .085, .035, 'highpass');
     this.noiseBurst(780, .065, .1, 'bandpass');
     this.tone(210, 70, .1, 'triangle', .05);
-  },
-  enemyShotgun(position = null) {
-    if (!this.active()) return;
-    const recorded = position
-      ? this.playSampleSpatial('shotgunShot', position, .54, 1.0)
-      : this.playSample('shotgunShot', .3, 1.0);
-    if (!recorded) this.shotgunShot();
-  },
-  enemyShotgunReload(position = null) {
-    if (!this.active()) return;
-    const recorded = position
-      ? this.playSampleSpatial('shotgunReload', position, .34, .92)
-      : this.playSample('shotgunReload', .24, .92);
-    if (!recorded) this.noiseBurst(1000, .015, .1, 'bandpass');
-  },
-  shotgunReload() {
-    if (!this.active()) return;
-    const recorded = this.playSample('shotgunReload', .88, timeFlow < .22 ? .74 : 1.0);
-    if (!recorded) { this.noiseBurst(1100, .025, .12, 'bandpass'); this.tone(360, 140, .12, 'triangle', .02); }
   },
   throwWeapon() {
     if (!this.active()) return;
@@ -5920,10 +5842,8 @@ const sound = {
     this.noiseBurst(2300, .025, .045, 'highpass');
     this.tone(1800, 620, .08, 'sawtooth', .018);
   },
-  dryFire(kind = currentWeapon) {
+  dryFire() {
     if (!this.active()) return;
-    const sample = kind === 'shotgun' ? 'gunEmpty' : 'revolverEmpty';
-    if (this.playSample(sample, .55, 1.0)) return;
     this.noiseBurst(2400, .022, .022, 'highpass');
     this.tone(820, 410, .035, 'triangle', .014);
   },
@@ -5932,11 +5852,7 @@ const sound = {
     this.noiseBurst(alt ? 130 : 105, .018, .065, 'lowpass');
   },
   hit() { if (!this.active()) return; this.playSample('hit', .8); this.tone(960, 1400, .055, 'triangle', .025); },
-  killFeedback(position = null) {
-    if (!this.active()) return;
-    if (position && this.playSampleSpatial('kill', position, .9, 1.0)) return;
-    this.playSample('kill', .9);
-  },
+  killFeedback() { if (!this.active()) return; this.playSample('kill', .9); },
   hurt() {
     if (!this.active()) return;
     this.noiseBurst(420, .23, .4, 'lowpass');
