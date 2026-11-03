@@ -14,6 +14,7 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
     wall: new THREE.MeshStandardMaterial({ color: 0xe7e9e7, roughness: .84 }),
     trim: new THREE.MeshStandardMaterial({ color: 0xc9cecc, roughness: .78 }),
     floor: new THREE.MeshStandardMaterial({ color: 0xb8bfbd, roughness: .93 }),
+    ceiling: new THREE.MeshStandardMaterial({ color: 0xdfe5e4, roughness: .92 }),
     livingFloor: new THREE.MeshStandardMaterial({ color: 0xc8cfcc, roughness: .96 }),
     diningFloor: new THREE.MeshStandardMaterial({ color: 0xd2cec4, roughness: .96 }),
     kitchenFloor: new THREE.MeshStandardMaterial({ color: 0xc2ccca, roughness: .94 }),
@@ -81,9 +82,17 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   wallZ(-5.8, -15.65, -12.4); wallZ(-5.8, -9.2, -5.35);
   wallZ(-1.6, 5.35, 8.0); wallZ(-1.6, 11.8, 15.65);
   wallZ(5.8, -5.35, -1.35); wallZ(5.8, 1.35, 5.35);
-  // Partial-height screens create CQB cover but keep sightlines through the house.
-  solid(mat.trim, .22, 1.25, 3.4, -5.35, .625, 6.0);
-  solid(mat.trim, .22, 1.25, 3.2, 5.35, .625, 5.9);
+  // Full-height partitions make the entry foyer and rear storage room feel like
+  // proper rooms, with wide doorways that keep the house route readable.
+  wallZ(6.0, -5.35, -1.45); wallZ(6.0, 1.45, 5.35);
+  wallZ(-12.0, -5.35, -1.45); wallZ(-12.0, 1.45, 5.35);
+
+  // Enclose a compact pantry off the kitchen. The existing shelf becomes its
+  // visual anchor; the doorway stays wide enough for both the player and AI.
+  wallX(11.35, -7.5, -5.35); wallX(11.35, -3.55, -1.8);
+  wallZ(-7.5, 11.35, 13.35); wallZ(-7.5, 14.95, 17.6);
+  wallZ(-1.8, 11.35, 11.8); wallZ(-1.8, 15.65, 17.6);
+  wallX(17.6, -7.5, -1.8);
 
   // Furniture builders: every substantial object uses the same visible/collision dimensions.
   const table = (x, z, w, d, h = .78, m = mat.wood) => {
@@ -165,6 +174,21 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   combatCover(7.0, 11.7, 1.6, .54);
   combatCover(-13.1, -7.0, 1.55, .54, Math.PI / 2);
   combatCover(7.0, -11.0, 1.65, .56);
+  combatCover(0, 8.2, 2.0, .62);
+  combatCover(-4.15, -4.4, 1.75, .62);
+  combatCover(4.15, -4.4, 1.75, .62);
+  combatCover(0, -9.3, 2.1, .64);
+
+  // Low ceilings over room clusters make the new partitions read as rooms
+  // instead of freestanding dividers. The central hall remains double-height.
+  const ceilingPanel = (x, z, w, d) => {
+    box(mat.ceiling, w, .10, d, x, 4.57, z, { ignoreRay: true, receive: false });
+    box(mat.light, Math.min(2.4, w * .42), .035, .48, x, 4.50, z, { ignoreRay: true, receive: false });
+    addRoomLight(room, 0xfff3df, 2.2, x, 3.75, z, 9.0);
+  };
+  ceilingPanel(0, 11.1, 10.35, 10.6);       // enclosed entry foyer
+  ceilingPanel(0, -14.25, 10.35, 4.35);     // rear storage room
+  ceilingPanel(14.45, -4.65, 6.1, 5.45);  // kitchen pantry
 
   // Lighting panels and broad, soft room lights.
   for (const [x, z, w] of [[0, 8, 3.0], [10, 7, 2.7], [10, -8, 2.6], [-11, -11, 2.4], [-11, 0, 2.4], [0, -11, 2.0]]) {
@@ -174,7 +198,7 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
 
   // Widen the existing ground floor without changing its room proportions.
   // Geometry, collision data, spawn, and navigation share the same transform.
-  const arenaScale = 1.12;
+  const arenaScale = 1.18;
   room.group.scale.set(arenaScale, 1, arenaScale);
   room.bounds.minX *= arenaScale; room.bounds.maxX *= arenaScale;
   room.bounds.minZ *= arenaScale; room.bounds.maxZ *= arenaScale;
@@ -193,7 +217,11 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
     }
     return true;
   };
-  const roomAt = (x, z) => {
+  const roomAt = (worldX, worldZ) => {
+    const x = worldX / arenaScale, z = worldZ / arenaScale;
+    if (x > 11.35 && x < 17.6 && z > -7.5 && z < -1.8) return 'pantry';
+    if (Math.abs(x) < 5.35 && z < -12.0) return 'storage';
+    if (Math.abs(x) < 5.35 && z > 6.0) return 'foyer';
     if (x < -5.5 && z < -5.8) return 'bedroom';
     if (x < -5.5) return 'study';
     if (x > 5.5 && z < -1.6) return 'kitchen';
@@ -208,7 +236,8 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
     [-14.4, -6.3], [-7.1, -7.4], [-14.4, -13.7], [-7.4, -14.1], [7.0, -12.0], [14.2, -12.2],
     [-2.8, -12.8], [2.8, -12.8], [-2.8, 1.4], [2.8, 1.4]
   ];
-  const points = planned.filter(([x, z]) => isWalkable(x, z, .5) && Math.hypot(x - room.spawn.x, z - room.spawn.z) >= 5.0);
+  const plannedWorld = planned.map(([x, z]) => [x * arenaScale, z * arenaScale]);
+  const points = plannedWorld.filter(([x, z]) => isWalkable(x, z, .5) && Math.hypot(x - room.spawn.x, z - room.spawn.z) >= 5.0);
   for (let z = -14.5; points.length < 26 && z <= 14.5; z += 2.2) {
     for (let x = -15.5; points.length < 26 && x <= 15.5; x += 2.2) {
       if (!isWalkable(x, z, .5) || Math.hypot(x - room.spawn.x, z - room.spawn.z) < 5) continue;
@@ -219,7 +248,7 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   const enemySpawns = points.map(([x, z], i) => {
     const area = roomAt(x, z);
     return { id: `${area}-${String(i + 1).padStart(2, '0')}`, x, y: 0, z, room: area,
-      waveMin: ['bedroom', 'study', 'kitchen'].includes(area) ? 3 : 1, waveMax: 8 };
+      waveMin: ['bedroom', 'study', 'kitchen', 'pantry', 'storage'].includes(area) ? 3 : 1, waveMax: 8 };
   });
   const findDropSpot = (x, z, radius = .2) => {
     for (let distance = 0; distance <= 2.4; distance += .3) {
@@ -232,7 +261,7 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
     }
     return null;
   };
-  const cellSize = .5, originX = -20, originZ = -19, width = 80, height = 76;
+  const cellSize = .5, originX = -23, originZ = -22, width = 92, height = 88;
   const open = new Uint8Array(width * height);
   for (let iz = 0; iz < height; iz++) for (let ix = 0; ix < width; ix++)
     open[iz * width + ix] = isWalkable(originX + (ix + .5) * cellSize, originZ + (iz + .5) * cellSize, .32) ? 1 : 0;
