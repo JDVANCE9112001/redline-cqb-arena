@@ -476,7 +476,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <div class="kicker">TIME BENDS AROUND YOU</div>
     <h1><span class="red">RED</span><span class="shift">SHIFT</span></h1>
     <div class="intro-jp">ミ ラ ク シ ス</div>
-    <p class="intro-copy">在更大的战斗地图中迎击 8 波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，射击、装填、投掷和碎块都遵循时间流速</b>。初始左轮只有 6 发，不能换弹；普通敌人一枪击碎，精英身体两枪、爆头一枪。第二波首名精英必带散弹枪，后续精英有概率携带。武器只能靠击杀拾取维持，Q 可投掷当前武器，E 拾取，掉落 30 秒后消失。</p>
+    <p class="intro-copy">在更大的战斗地图中迎击 8 波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，射击、装填、投掷和碎块都遵循时间流速</b>。初始左轮只有 6 发，不能换弹；普通敌人一枪击碎，精英身体两枪、爆头一枪。精英使用步枪，后续波次敌人会携带冲锋枪、步枪或散弹枪。武器只能靠击杀拾取维持，Q 可投掷当前武器，E 拾取，掉落 30 秒后消失。</p>
     <div class="intro-actions">
       <button class="enter-btn" id="enter-btn" type="button"><span>进入模拟</span><span>ENTER SIMULATION</span><span class="arrow">↗</span></button>
       <div class="enter-note"><b>点击画面锁定鼠标</b>CLICK ANYWHERE TO ENGAGE</div>
@@ -661,7 +661,6 @@ const WEAPON_DEFS = {
 };
 let equippedWeapon = { kind: 'revolver', ammo: 6, maxAmmo: 6 };
 let weaponDrops = [];
-let fireHeld = false;
 let shotQueued = false;
 let lastShotRealAt = -Infinity;
 let shotgunReloadUntil = -Infinity;
@@ -670,9 +669,12 @@ let lastPickupHint = '';
 let playerLight = null;
 
 function enemyWeaponForWave(wave, elite, index) {
-  if (!elite) return 'revolver';
-  if (wave === 2 && index === 0) return 'shotgun';
-  return wave >= 3 && Math.random() < .4 ? 'shotgun' : 'revolver';
+  if (elite) return 'rifle';
+  const roll = (index * 7 + Math.floor(Math.random() * 7)) % 7;
+  if (wave <= 2) return 'revolver';
+  if (wave <= 4) return roll < 2 ? 'mac10' : 'revolver';
+  if (wave <= 6) return roll < 2 ? 'rifle' : 'mac10';
+  return roll < 2 ? 'shotgun' : roll < 5 ? 'rifle' : 'mac10';
 }
 
 /* --------------------------------------------------------------------------
@@ -1895,9 +1897,13 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Quaternius pistol unavailable; loading original sidearm.', error);
   }
   try {
-    assets.revolverObject = (await loader.loadAsync('assets/models/Revolver_Stealth_Hunter.glb')).scene;
+    const gltf = await loader.loadAsync('assets/models/revolver.glb');
+    let revolver = gltf.scene.getObjectByName('revolver_with_longass_name_0');
+    if (!revolver) gltf.scene.traverse(obj => { if (!revolver && /revolver/i.test(obj.name)) revolver = obj; });
+    assets.revolverObject = revolver || gltf.scene;
   } catch (error) {
-    console.warn('[RED SHIFT] Revolver GLB unavailable; using the existing sidearm model.', error);
+    try { assets.revolverObject = (await loader.loadAsync('assets/models/Revolver_Stealth_Hunter.glb')).scene; }
+    catch { console.warn('[RED SHIFT] Revolver GLB unavailable; using the existing sidearm model.', error); }
   }
   try {
     assets.mac10Object = (await loader.loadAsync('assets/models/MAC10.glb')).scene;
@@ -1921,6 +1927,11 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Elite rifle unavailable; using simplified rifle.', error);
   }
   try {
+    assets.shotgunObject = (await loader.loadAsync('assets/models/shotgun-m1014.glb')).scene;
+    assets.shotgunObject.userData.m1014 = true;
+    assets.shotgunObject.traverse(obj => { if (obj.isMesh) { obj.castShadow = false; obj.receiveShadow = false; obj.frustumCulled = false; } });
+  } catch (modelError) {
+    try {
     assets.shotgunObject = await new OBJLoader().loadAsync('assets/models/Shotgun_NoStock.obj');
     const shades = { Black: 0x0b1118, DarkMetal: 0x1c2932, DarkWood: 0x49342d, Metal: 0x667985, Wood: 0x684439 };
     const mats = Object.fromEntries(Object.entries(shades).map(([name, color]) => [name,
@@ -1933,8 +1944,9 @@ async function loadGameAssets() {
       obj.castShadow = false;
       obj.receiveShadow = false;
     });
-  } catch (error) {
-    console.warn('[RED SHIFT] Shotgun model unavailable; using simplified shotgun.', error);
+    } catch (error) {
+      console.warn('[RED SHIFT] Shotgun models unavailable; using simplified shotgun.', error || modelError);
+    }
   }
   try {
     assets.enemyFace = await new THREE.TextureLoader().loadAsync('assets/enemy-face.png');
@@ -1965,13 +1977,14 @@ function buildShotgun() {
   const rig = new THREE.Group();
   camera.add(rig);
   const gun = new THREE.Group();
-  gun.position.set(.37, -.34, -.22);
+  gun.position.set(.25, -.17, -.48);
   gun.rotation.set(-.025, 0, .008);
   rig.add(gun);
   if (GAME_ASSETS.shotgunObject) {
     const model = GAME_ASSETS.shotgunObject.clone(true);
-    model.scale.setScalar(.23);
-    model.rotation.y = Math.PI / 2;
+    const m1014 = !!GAME_ASSETS.shotgunObject.userData.m1014;
+    model.scale.setScalar(m1014 ? .20 : .23);
+    model.rotation.y = m1014 ? Math.PI : Math.PI / 2;
     gun.add(model);
   } else {
     const dark = new THREE.MeshStandardMaterial({ color: 0x17212a, metalness: .35, roughness: .58 });
@@ -1983,7 +1996,7 @@ function buildShotgun() {
     gun.add(barrel, stock);
   }
   const muzzleAnchor = new THREE.Object3D();
-  muzzleAnchor.position.set(0, .015, -.94);
+  muzzleAnchor.position.set(0, .015, -.28);
   gun.add(muzzleAnchor);
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd5a6, transparent: true, opacity: .95, depthWrite: false, side: THREE.DoubleSide });
   const flashGroup = new THREE.Mesh(new THREE.PlaneGeometry(.24, .24), flashMat);
@@ -2801,13 +2814,21 @@ class Enemy {
     if (this.gun) this.gun.visible = false;
     const gunMat = enemyAssetGunMat;
     const gun = new THREE.Group();
-    gun.position.set(0, -.015, .03);
+    const isM1014 = this.loadout.kind === 'shotgun' && !!GAME_ASSETS.shotgunObject?.userData.m1014;
+    gun.position.set(isM1014 ? .30 : 0, isM1014 ? .18 : -.015, isM1014 ? .24 : .03);
+    if (isM1014) gun.rotation.y = .20;
     const weaponSource = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
       : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
         : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
-    const weaponVisual = centeredWeaponModel(weaponSource, .53, -Math.PI / 2);
+    const weaponVisual = isM1014
+      ? GAME_ASSETS.shotgunObject.clone(true)
+      : centeredWeaponModel(weaponSource, .53, -Math.PI / 2);
     if (weaponVisual) {
-      weaponVisual.position.set(0, .015, .07);
+      if (isM1014) {
+        weaponVisual.scale.setScalar(.20);
+        weaponVisual.rotation.y = Math.PI;
+        weaponVisual.position.set(0, -.015, .02);
+      } else weaponVisual.position.set(0, .015, .07);
       gun.add(weaponVisual);
     } else if (geos.enemy_gun) {
       gun.scale.setScalar(1.2);
@@ -2818,7 +2839,7 @@ class Enemy {
     this.arms[1].hand.add(gun);
     this.gun = gun;
     this.gunMuzzle = new THREE.Object3D();
-    this.gunMuzzle.position.set(0, .02, weaponVisual ? .36 : .178);
+    this.gunMuzzle.position.set(0, .02, isM1014 ? .29 : weaponVisual ? .36 : .178);
     gun.add(this.gunMuzzle);
     this.handGlow = addGlow(this.gunMuzzle, 0, 0, 0, .4, .4, 0xff2f50, .0, handGlowPool.take());
 
@@ -3789,9 +3810,21 @@ function spawnWeaponDrop(spec, x, z, { expiresIn = 30000, replace = false } = {}
   const root = new THREE.Group();
   root.position.set(spot.x, y, spot.z);
   root.rotation.y = Math.random() * Math.PI * 2;
-  const visual = centeredWeaponModel(weaponModelSource(spec.kind), spec.kind === 'shotgun' ? .68 : .56, Math.PI / 2);
+    let visual;
+    if (spec.kind === 'shotgun' && GAME_ASSETS.shotgunObject) {
+      const model = GAME_ASSETS.shotgunObject.clone(true);
+      const m1014 = !!GAME_ASSETS.shotgunObject.userData.m1014;
+      model.scale.setScalar(m1014 ? .18 : .12);
+      model.rotation.y = m1014 ? Math.PI : Math.PI / 2;
+      model.position.set(0, -.02, m1014 ? .04 : .05);
+      visual = new THREE.Group();
+      visual.add(model);
+      visual.rotation.z = Math.PI / 2;
+    } else {
+      visual = centeredWeaponModel(weaponModelSource(spec.kind), .56, Math.PI / 2);
+      if (visual) visual.rotation.x = Math.PI / 2;
+    }
   if (visual) {
-    visual.rotation.x = Math.PI / 2;
     visual.position.y = .02;
     root.add(visual);
   } else {
@@ -7472,10 +7505,8 @@ document.addEventListener('mousemove', e => {
 
 document.addEventListener('mousedown', e => {
   if (gameState !== 'playing' || !isLocked) return;
-  if (e.button === 0) { fireHeld = true; shoot(); }
+  if (e.button === 0) shoot();
 });
-document.addEventListener('mouseup', e => { if (e.button === 0) fireHeld = false; });
-document.addEventListener('blur', () => { fireHeld = false; });
 document.addEventListener('contextmenu', e => {
   if (isLocked) e.preventDefault();
 });
@@ -7728,7 +7759,7 @@ function animate() {
     updatePlayer(dt);
     updateWeaponDrops();
     updateShotgunReload();
-    if ((fireHeld || shotQueued) && isLocked) shoot();
+    if (shotQueued && isLocked) shoot();
     if (campaign.phase === 'WAVE_BREAK') {
       const previousSecond = Math.ceil(waveCountdown);
       waveCountdown = Math.max(0, waveCountdown - dt);
