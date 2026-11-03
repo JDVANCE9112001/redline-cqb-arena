@@ -21,6 +21,8 @@ Escape pauses, R restarts, and M mutes.
 The Pistol_2, AssaultRifle2_2, and modified Shotgun_ShortStock models come from
 Quaternius's Ultimate Gun Pack (CC0 1.0). The M1014 model and common-enemy kill
 sound are from the supplied handoff package. The enemy face image was supplied by the game's owner.
+`audio/mac10-shot.mp3` uses the owner's latest supplied recording for MAC-10s;
+rifles continue to use the existing rifle shot.
 
 ## 本地运行
 

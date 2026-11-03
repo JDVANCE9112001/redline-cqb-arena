@@ -2611,6 +2611,28 @@ function findNavWaypoint(startX, startZ, targetX, targetZ, grid) {
   return { x: originX + (ix + .5) * cellSize, z: originZ + (iz + .5) * cellSize };
 }
 
+function buildM1014EnemyRig(parent) {
+  const gun = new THREE.Group();
+  // Mount the long shotgun across the torso in the handoff's compact ready pose.
+  gun.position.set(.30, .18, .24);
+  gun.rotation.y = .20;
+  const model = GAME_ASSETS.shotgunObject.clone(true);
+  model.scale.setScalar(.20);
+  model.position.set(0, -.015, .02);
+  gun.add(model);
+  const muzzle = new THREE.Object3D();
+  muzzle.position.set(0, .02, .29);
+  gun.add(muzzle);
+  gun.traverse(obj => {
+    if (!obj.isMesh) return;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.frustumCulled = false;
+  });
+  parent.add(gun);
+  return { gun, muzzle };
+}
+
 class Enemy {
   constructor(x, z, index, scale = 1, elite = false) {
     this.index = index;
@@ -2745,33 +2767,40 @@ class Enemy {
     for (const part of this.hitParts) part.userData.enemy = this;
 
     // Enemy weapons are cloned from the same local assets used by the player.
-    this.gun = new THREE.Group();
-    this.gun.position.set(0, -.055, .025);
-    const source = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
-      : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
-        : this.loadout.kind === 'rifle' ? GAME_ASSETS.rifleObject
-          : GAME_ASSETS.shotgunObject;
-    const visual = centeredWeaponModel(source, this.loadout.kind === 'shotgun' ? .64 : .53, -Math.PI / 2);
-    if (visual) {
-      visual.position.set(0, .015, .08);
-      this.gun.add(visual);
+    this.gunUsesBodyGrip = this.loadout.kind === 'shotgun' && !!GAME_ASSETS.shotgunObject?.userData.m1014;
+    if (this.gunUsesBodyGrip) {
+      const rig = buildM1014EnemyRig(this.body);
+      this.gun = rig.gun;
+      this.gunMuzzle = rig.muzzle;
     } else {
-      const pistolSlide = new THREE.Mesh(enemyGunSlideGeo, enemyGunMat);
-      pistolSlide.position.set(0, .02, .065);
-      const pistolBarrel = new THREE.Mesh(enemyGunBarrelGeo, enemyGunMat);
-      pistolBarrel.rotation.x = Math.PI / 2;
-      pistolBarrel.position.set(0, .02, .145);
-      const pistolGrip = new THREE.Mesh(enemyGunGripGeo, enemyGunMat);
-      pistolGrip.position.set(0, -.033, .012);
-      pistolGrip.rotation.x = -.28;
-      const pistolGuard = new THREE.Mesh(enemyGunGuardGeo, enemyGunMat);
-      pistolGuard.position.set(0, -.02, .052);
-      this.gun.add(pistolSlide, pistolBarrel, pistolGrip, pistolGuard);
+      this.gun = new THREE.Group();
+      this.gun.position.set(0, -.055, .025);
+      const source = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
+        : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
+          : this.loadout.kind === 'rifle' ? GAME_ASSETS.rifleObject
+            : GAME_ASSETS.shotgunObject;
+      const visual = centeredWeaponModel(source, this.loadout.kind === 'shotgun' ? .64 : .53, -Math.PI / 2);
+      if (visual) {
+        visual.position.set(0, .015, .08);
+        this.gun.add(visual);
+      } else {
+        const pistolSlide = new THREE.Mesh(enemyGunSlideGeo, enemyGunMat);
+        pistolSlide.position.set(0, .02, .065);
+        const pistolBarrel = new THREE.Mesh(enemyGunBarrelGeo, enemyGunMat);
+        pistolBarrel.rotation.x = Math.PI / 2;
+        pistolBarrel.position.set(0, .02, .145);
+        const pistolGrip = new THREE.Mesh(enemyGunGripGeo, enemyGunMat);
+        pistolGrip.position.set(0, -.033, .012);
+        pistolGrip.rotation.x = -.28;
+        const pistolGuard = new THREE.Mesh(enemyGunGuardGeo, enemyGunMat);
+        pistolGuard.position.set(0, -.02, .052);
+        this.gun.add(pistolSlide, pistolBarrel, pistolGrip, pistolGuard);
+      }
+      this.gunMuzzle = new THREE.Object3D();
+      this.gunMuzzle.position.set(0, .02, this.loadout.kind === 'rifle' || this.loadout.kind === 'shotgun' ? .47 : .34);
+      this.gun.add(this.gunMuzzle);
+      this.arms[1].hand.add(this.gun);
     }
-    this.gunMuzzle = new THREE.Object3D();
-    this.gunMuzzle.position.set(0, .02, this.loadout.kind === 'rifle' || this.loadout.kind === 'shotgun' ? .47 : .34);
-    this.gun.add(this.gunMuzzle);
-    this.arms[1].hand.add(this.gun);
     this.gun.traverse(obj => { if (obj.isMesh) { obj.castShadow = false; obj.receiveShadow = false; } });
 
     // red muzzle charge while winding up
@@ -2833,28 +2862,35 @@ class Enemy {
       addPart('foot_' + tag, leg.ankle);
     }
 
-    if (this.gun) this.gun.visible = false;
-    const gunMat = enemyAssetGunMat;
-    const gun = new THREE.Group();
-    gun.position.set(0, -.015, .03);
-    const weaponSource = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
-      : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
-        : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
-    const weaponVisual = centeredWeaponModel(weaponSource, .53, -Math.PI / 2);
-    if (weaponVisual) {
-      weaponVisual.position.set(0, .015, .07);
-      gun.add(weaponVisual);
-    } else if (geos.enemy_gun) {
-      gun.scale.setScalar(1.2);
-      const gunMesh = new THREE.Mesh(geos.enemy_gun, gunMat);
-      gunMesh.castShadow = true;
-      gun.add(gunMesh);
+    if (this.gun?.parent) this.gun.parent.remove(this.gun);
+    this.gunUsesBodyGrip = this.loadout.kind === 'shotgun' && !!GAME_ASSETS.shotgunObject?.userData.m1014;
+    if (this.gunUsesBodyGrip) {
+      const rig = buildM1014EnemyRig(this.body);
+      this.gun = rig.gun;
+      this.gunMuzzle = rig.muzzle;
+    } else {
+      const gunMat = enemyAssetGunMat;
+      const gun = new THREE.Group();
+      gun.position.set(0, -.015, .03);
+      const weaponSource = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
+        : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
+          : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
+      const weaponVisual = centeredWeaponModel(weaponSource, .53, -Math.PI / 2);
+      if (weaponVisual) {
+        weaponVisual.position.set(0, .015, .07);
+        gun.add(weaponVisual);
+      } else if (geos.enemy_gun) {
+        gun.scale.setScalar(1.2);
+        const gunMesh = new THREE.Mesh(geos.enemy_gun, gunMat);
+        gunMesh.castShadow = true;
+        gun.add(gunMesh);
+      }
+      this.arms[1].hand.add(gun);
+      this.gun = gun;
+      this.gunMuzzle = new THREE.Object3D();
+      this.gunMuzzle.position.set(0, .02, weaponVisual ? .36 : .178);
+      gun.add(this.gunMuzzle);
     }
-    this.arms[1].hand.add(gun);
-    this.gun = gun;
-    this.gunMuzzle = new THREE.Object3D();
-    this.gunMuzzle.position.set(0, .02, weaponVisual ? .36 : .178);
-    gun.add(this.gunMuzzle);
     this.handGlow = addGlow(this.gunMuzzle, 0, 0, 0, .4, .4, 0xff2f50, .0, handGlowPool.take());
 
     for (const part of this.hitParts) part.userData.enemy = this;
@@ -2864,33 +2900,42 @@ class Enemy {
     const oldGun = this.gun;
     const glow = this.handGlow;
     if (oldGun?.parent) oldGun.parent.remove(oldGun);
-    const gun = new THREE.Group();
-    gun.position.set(.12, .31, .31);
     const eliteWeapon = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
       : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
         : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
-    if (eliteWeapon) {
-      const model = eliteWeapon.clone(true);
-      model.scale.setScalar(this.loadout.kind === 'shotgun' ? .31 : this.loadout.kind === 'revolver' ? .38 : .22);
-      model.rotation.y = -Math.PI / 2 + .27;
-      model.position.set(0, -.015, .025);
-      gun.add(model);
+    let gun;
+    this.gunUsesBodyGrip = this.loadout.kind === 'shotgun' && !!GAME_ASSETS.shotgunObject?.userData.m1014;
+    if (this.gunUsesBodyGrip) {
+      const rig = buildM1014EnemyRig(this.body);
+      gun = rig.gun;
+      this.gunMuzzle = rig.muzzle;
     } else {
-      const body = new THREE.Mesh(new THREE.BoxGeometry(.10, .085, .49), enemyGunMat);
-      const barrel = new THREE.Mesh(new THREE.BoxGeometry(.038, .038, .27), enemyAssetGunMat);
-      barrel.position.z = .36;
-      const stock = new THREE.Mesh(new THREE.BoxGeometry(.14, .11, .20), enemyGunMat);
-      stock.position.z = -.30;
-      const magazine = new THREE.Mesh(new THREE.BoxGeometry(.09, .20, .07), enemyGunMat);
-      magazine.position.set(0, -.13, .06);
-      gun.add(body, barrel, stock, magazine);
+      gun = new THREE.Group();
+      gun.position.set(.12, .31, .31);
+      if (eliteWeapon) {
+        const model = eliteWeapon.clone(true);
+        model.scale.setScalar(this.loadout.kind === 'shotgun' ? .31 : this.loadout.kind === 'revolver' ? .38 : .22);
+        model.rotation.y = -Math.PI / 2 + .27;
+        model.position.set(0, -.015, .025);
+        gun.add(model);
+      } else {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(.10, .085, .49), enemyGunMat);
+        const barrel = new THREE.Mesh(new THREE.BoxGeometry(.038, .038, .27), enemyAssetGunMat);
+        barrel.position.z = .36;
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(.14, .11, .20), enemyGunMat);
+        stock.position.z = -.30;
+        const magazine = new THREE.Mesh(new THREE.BoxGeometry(.09, .20, .07), enemyGunMat);
+        magazine.position.set(0, -.13, .06);
+        gun.add(body, barrel, stock, magazine);
+      }
+      this.gunMuzzle = new THREE.Object3D();
+      this.gunMuzzle.position.set(.16, .04, eliteWeapon ? (this.loadout.kind === 'shotgun' ? .91 : 1.01) : .76);
+      gun.add(this.gunMuzzle);
+      this.body.add(gun);
     }
-    this.gunMuzzle = new THREE.Object3D();
-    this.gunMuzzle.position.set(.16, .04, eliteWeapon ? (this.loadout.kind === 'shotgun' ? .91 : 1.01) : .76);
-    gun.add(this.gunMuzzle);
     this.gunMuzzle.add(glow);
     glow.position.set(0, 0, 0);
-    this.body.add(gun);
+    if (gun.parent !== this.body) this.body.add(gun);
     this.gun = gun;
 
     if (eliteFaceMatHealthy) {
@@ -3284,7 +3329,10 @@ class Enemy {
     la.hand.rotation.z = .08 + stride * .045 * this.walk;
     ra.hand.rotation.z = -.08 - .15 * attack;
 
-    if (!this.elite) {
+    if (this.gunUsesBodyGrip) {
+      this.gun.rotation.x = attack * -.035;
+      this.gun.rotation.z = .01;
+    } else if (!this.elite) {
       this.gun.rotation.x = -(ra.shoulder.rotation.x + ra.elbow.rotation.x) - .02;
       this.gun.rotation.z = -(ra.hand.rotation.z + ra.shoulder.rotation.z) + .04;
     }
@@ -3304,7 +3352,8 @@ class Enemy {
     this.group.updateMatrixWorld(true);
     const start = new THREE.Vector3();
     this.gunMuzzle.getWorldPosition(start);
-    sound.enemyShot();
+    if (this.loadout.kind === 'mac10') sound.mac10Shot(.45);
+    else sound.enemyShot();
     addMuzzleFlash(start, 0xffb08a);
     const target = playerPos.clone();
     target.y = playerPos.y - .04;
@@ -5781,8 +5830,8 @@ const sound = {
         const bytes = await response.arrayBuffer();
         return new Promise((resolve, reject) => this.ctx.decodeAudioData(bytes, resolve, reject));
       };
-      const names = ['gunshot', 'glass', 'enemyShot', 'hit', 'kill', 'commonKill'];
-      const paths = ['audio/player-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3', 'audio/glass-death-4s.wav'];
+      const names = ['gunshot', 'mac10', 'glass', 'enemyShot', 'hit', 'kill', 'commonKill'];
+      const paths = ['audio/player-shot.mp3', 'audio/mac10-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3', 'audio/glass-death-4s.wav'];
       const results = await Promise.allSettled(paths.map(load));
       results.forEach((result, i) => {
         if (result.status === 'fulfilled') this.samples[names[i]] = result.value;
@@ -5839,19 +5888,19 @@ const sound = {
   },
   shotgunShot() {
     if (!this.active()) return;
-    this.playSample('gunshot', .92, .72);
-    this.noiseBurst(680, .20, .21, 'lowpass');
-    this.noiseBurst(2600, .075, .05, 'highpass');
-    this.tone(110, 38, .25, 'triangle', .07);
+    this.playSample('gunshot', .78, .72);
+    this.noiseBurst(680, .17, .21, 'lowpass');
+    this.noiseBurst(2600, .06, .05, 'highpass');
+    this.tone(110, 38, .25, 'triangle', .06);
   },
   pistolShot() {
     if (!this.active()) return;
-    const recorded = this.playSample('gunshot', 1.0, .93);
+    const recorded = this.playSample('gunshot', .82, .93);
     if (recorded) {
-      this.noiseBurst(2800, .04, .018, 'highpass');
-      this.tone(160, 48, .17, 'triangle', .045);
-      setTimeout(() => { if (this.active()) this.noiseBurst(1300, .045, .15, 'lowpass'); }, 55);
-      setTimeout(() => { if (this.active()) { this.noiseBurst(2300, .018, .03, 'highpass'); this.tone(540, 280, .04, 'triangle', .008); } }, 62);
+      this.noiseBurst(2800, .034, .018, 'highpass');
+      this.tone(160, 48, .17, 'triangle', .038);
+      setTimeout(() => { if (this.active()) this.noiseBurst(1300, .038, .15, 'lowpass'); }, 55);
+      setTimeout(() => { if (this.active()) { this.noiseBurst(2300, .015, .03, 'highpass'); this.tone(540, 280, .04, 'triangle', .007); } }, 62);
       return;
     }
     // Fallback when the recording is unavailable (e.g. opened via file://):
@@ -5881,9 +5930,15 @@ const sound = {
     }
     if (!recorded) this.tone(255, 62, .2, 'triangle', .03);
   },
-  enemyShot() {
+  mac10Shot(gain = .82) {
     if (!this.active()) return;
-    const recorded = this.playSample('enemyShot', .45, 1.0);
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    if (this.playSample('mac10', gain, 1.0)) return;
+    this.enemyShot(.40);
+  },
+  enemyShot(gain = .45) {
+    if (!this.active()) return;
+    const recorded = this.playSample('enemyShot', gain, 1.0);
     if (recorded) return;
     this.noiseBurst(2400, .085, .035, 'highpass');
     this.noiseBurst(780, .065, .1, 'bandpass');
@@ -5931,7 +5986,7 @@ const sound = {
   killFeedback(elite = false) {
     if (!this.active()) return;
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-    const recorded = this.playSample(elite ? 'kill' : 'commonKill', elite ? .9 : 1.25);
+    const recorded = this.playSample(elite ? 'kill' : 'commonKill', elite ? 1.0 : 1.4);
     if (!recorded && !elite) this.playSample('kill', .9);
   },
   hurt() {
@@ -6737,7 +6792,8 @@ function shoot(fromHeldAutoFire = false) {
   shots++;
   lastShotRealAt = performance.now();
   lastShotSim = runElapsed;
-  if (currentWeapon === 'rifle') sound.enemyShot();
+  if (currentWeapon === 'rifle') sound.enemyShot(.40);
+  else if (currentWeapon === 'mac10') sound.mac10Shot(.82);
   else sound.pistolShot();
   alertEnemies(camera.position);
   weapons.recoil = 1;
