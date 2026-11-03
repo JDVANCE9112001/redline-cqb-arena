@@ -683,12 +683,18 @@ let lastPickupHint = '';
 let playerLight = null;
 
 function enemyWeaponForWave(wave, elite, index) {
-  if (elite) return 'rifle';
+  // The first wave-two elite guarantees the new M1014 drop; later elites
+  // carry one often enough that the shotgun can re-enter the run naturally.
+  if (elite) {
+    if (wave === 2 && index === 0) return 'shotgun';
+    if (wave >= 3 && Math.random() < .40) return 'shotgun';
+    return 'rifle';
+  }
   const roll = (index * 7 + Math.floor(Math.random() * 7)) % 7;
   if (wave <= 2) return 'revolver';
-  if (wave <= 4) return roll < 2 ? 'mac10' : 'revolver';
-  if (wave <= 6) return roll < 2 ? 'rifle' : 'mac10';
-  return roll < 2 ? 'shotgun' : roll < 5 ? 'rifle' : 'mac10';
+  if (wave <= 4) return roll === 0 ? 'shotgun' : roll < 3 ? 'mac10' : 'revolver';
+  if (wave <= 6) return roll < 2 ? 'shotgun' : roll < 4 ? 'rifle' : 'mac10';
+  return roll < 3 ? 'shotgun' : roll < 5 ? 'rifle' : 'mac10';
 }
 
 /* --------------------------------------------------------------------------
@@ -1937,20 +1943,33 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Elite rifle unavailable; using simplified rifle.', error);
   }
   try {
-    assets.shotgunObject = await new OBJLoader().loadAsync('assets/models/Shotgun_NoStock.obj');
-    const shades = { Black: 0x0b1118, DarkMetal: 0x1c2932, DarkWood: 0x49342d, Metal: 0x667985, Wood: 0x684439 };
-    const mats = Object.fromEntries(Object.entries(shades).map(([name, color]) => [name,
-      new THREE.MeshStandardMaterial({ color, metalness: name.includes('Metal') ? .45 : .1, roughness: .63, flatShading: true })
-    ]));
+    const gltf = await loader.loadAsync('assets/models/shotgun-m1014.glb');
+    assets.shotgunObject = gltf.scene;
+    assets.shotgunObject.userData.m1014 = true;
     assets.shotgunObject.traverse(obj => {
       if (!obj.isMesh) return;
-      const assign = mat => mats[mat?.name] || mats.DarkMetal;
-      obj.material = Array.isArray(obj.material) ? obj.material.map(assign) : assign(obj.material);
       obj.castShadow = false;
       obj.receiveShadow = false;
+      obj.frustumCulled = false;
     });
   } catch (error) {
-    console.warn('[RED SHIFT] Shotgun model unavailable; using simplified shotgun.', error);
+    console.warn('[RED SHIFT] M1014 unavailable; loading legacy shotgun.', error);
+    try {
+      assets.shotgunObject = await new OBJLoader().loadAsync('assets/models/Shotgun_NoStock.obj');
+      const shades = { Black: 0x0b1118, DarkMetal: 0x1c2932, DarkWood: 0x49342d, Metal: 0x667985, Wood: 0x684439 };
+      const mats = Object.fromEntries(Object.entries(shades).map(([name, color]) => [name,
+        new THREE.MeshStandardMaterial({ color, metalness: name.includes('Metal') ? .45 : .1, roughness: .63, flatShading: true })
+      ]));
+      assets.shotgunObject.traverse(obj => {
+        if (!obj.isMesh) return;
+        const assign = mat => mats[mat?.name] || mats.DarkMetal;
+        obj.material = Array.isArray(obj.material) ? obj.material.map(assign) : assign(obj.material);
+        obj.castShadow = false;
+        obj.receiveShadow = false;
+      });
+    } catch (fallbackError) {
+      console.warn('[RED SHIFT] Shotgun model unavailable; using simplified shotgun.', fallbackError);
+    }
   }
   try {
     assets.enemyFace = await new THREE.TextureLoader().loadAsync('assets/enemy-face.png');
@@ -1981,13 +2000,13 @@ function buildShotgun() {
   const rig = new THREE.Group();
   camera.add(rig);
   const gun = new THREE.Group();
-  gun.position.set(.37, -.34, -.22);
-  gun.rotation.set(-.025, 0, .008);
+  gun.position.set(.25, -.17, -.48);
+  gun.rotation.set(-.02, 0, .006);
   rig.add(gun);
   if (GAME_ASSETS.shotgunObject) {
     const model = GAME_ASSETS.shotgunObject.clone(true);
-    model.scale.setScalar(.23);
-    model.rotation.y = Math.PI / 2;
+    model.scale.setScalar(.20);
+    model.rotation.y = Math.PI;
     gun.add(model);
   } else {
     const dark = new THREE.MeshStandardMaterial({ color: 0x17212a, metalness: .35, roughness: .58 });
@@ -1999,7 +2018,7 @@ function buildShotgun() {
     gun.add(barrel, stock);
   }
   const muzzleAnchor = new THREE.Object3D();
-  muzzleAnchor.position.set(0, .015, -.94);
+  muzzleAnchor.position.set(0, .015, -.28);
   gun.add(muzzleAnchor);
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd5a6, transparent: true, opacity: .95, depthWrite: false, side: THREE.DoubleSide });
   const flashGroup = new THREE.Mesh(new THREE.PlaneGeometry(.24, .24), flashMat);
@@ -3940,7 +3959,7 @@ function defeatEnemy(enemy, hitPoint, normal = null, impact = null) {
     eliteKills++;
   }
   setWeaponHud();
-  sound.killFeedback();
+  sound.killFeedback(enemy.elite);
   for (const other of activeEnemies) {
     if (other === enemy || !other.alive) continue;
     if (other.group.position.distanceTo(enemy.group.position) < 11) other.alertFromAlly(point);
@@ -3949,8 +3968,15 @@ function defeatEnemy(enemy, hitPoint, normal = null, impact = null) {
   ui.hitmarker.classList.remove('kill');
   ui.hitmarker.classList.add('hit', 'kill');
   setTimeout(() => ui.hitmarker.classList.remove('hit', 'kill'), 160);
+  triggerKillFeedback();
   if (activeEnemies.every(e => !e.alive)) onAllEnemiesDown();
   return true;
+}
+
+function triggerKillFeedback() {
+  // Brief camera impulse from the handoff build, layered under the glass burst.
+  killShake = Math.min(.012, killShake + .0068);
+  killShakeSeed = Math.random() * Math.PI * 2;
 }
 
 function spawnEnemies(count = 1) {
@@ -4046,6 +4072,8 @@ let yaw = 0, pitch = 0;
 let recoilPitch = 0;
 let recoilYaw = 0;
 let recoilHold = 0;
+let killShake = 0;
+let killShakeSeed = 0;
 let isLocked = false;
 let runElapsed = 0;
 let elapsedPaint = 0;
@@ -5603,7 +5631,7 @@ function restartWorld() {
   player.velocity.set(0, 0, 0);
   player.bob = 0;
   player.bobTime = 0;
-  yaw = 0; pitch = 0; recoilPitch = 0; recoilYaw = 0; recoilHold = 0;
+  yaw = 0; pitch = 0; recoilPitch = 0; recoilYaw = 0; recoilHold = 0; killShake = 0; killShakeSeed = 0;
   camera.position.copy(player.position);
   camera.rotation.set(0, 0, 0);
   timeFlow = TIME_DILATED;
@@ -5713,7 +5741,8 @@ function onAllEnemiesDown() {
 const sound = {
   ctx: null, master: null, muted: false, hum: null,
   bgm: new Audio('audio/guardians-bgm.mp3'),
-  samples: { gunshot: null, glass: null, enemyShot: null, hit: null, kill: null, pickup: null }, samplesLoading: false,
+  pickupAudio: new Audio('audio/weapon-pickup.mp3'),
+  samples: { gunshot: null, glass: null, enemyShot: null, hit: null, kill: null, commonKill: null }, samplesLoading: false,
   init() {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -5723,6 +5752,7 @@ const sound = {
     if (!AC) return;
     this.ctx = new AC();
     this.bgm.loop = true; this.bgm.volume = .42; this.bgm.preload = 'auto';
+    this.pickupAudio.preload = 'auto'; this.pickupAudio.volume = .98;
     if (!this.muted) this.bgm.play().catch(() => {});
     this.master = this.ctx.createGain();
     this.master.gain.value = .22;
@@ -5744,16 +5774,23 @@ const sound = {
   async loadSamples() {
     if (this.samplesLoading || !this.ctx) return;
     this.samplesLoading = true;
-    const load = async url => {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const bytes = await response.arrayBuffer();
-      return new Promise((resolve, reject) => this.ctx.decodeAudioData(bytes, resolve, reject));
-    };
-    const names = ['gunshot', 'glass', 'enemyShot', 'hit', 'kill', 'pickup'];
-    const paths = ['audio/player-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3', 'audio/weapon-pickup.mp3'];
-    const results = await Promise.allSettled(paths.map(load));
-    results.forEach((result, i) => { if (result.status === 'fulfilled') this.samples[names[i]] = result.value; });
+    try {
+      const load = async url => {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const bytes = await response.arrayBuffer();
+        return new Promise((resolve, reject) => this.ctx.decodeAudioData(bytes, resolve, reject));
+      };
+      const names = ['gunshot', 'glass', 'enemyShot', 'hit', 'kill', 'commonKill'];
+      const paths = ['audio/player-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3', 'audio/glass-death-4s.wav'];
+      const results = await Promise.allSettled(paths.map(load));
+      results.forEach((result, i) => {
+        if (result.status === 'fulfilled') this.samples[names[i]] = result.value;
+        else console.warn(`[RED SHIFT] Sound sample unavailable: ${paths[i]}`, result.reason);
+      });
+    } finally {
+      this.samplesLoading = false;
+    }
   },
   playSample(key, gain = 1, rate = 1, delay = 0) {
     if (!this.active() || !this.samples[key]) return false;
@@ -5858,10 +5895,23 @@ const sound = {
     this.tone(340, 105, .22, 'triangle', .022);
   },
   pickup() {
-    if (!this.active()) return;
-    if (this.playSample('pickup', .9, 1.0)) return;
-    this.tone(620, 1180, .07, 'triangle', .03);
-    setTimeout(() => { if (this.active()) this.tone(1180, 1480, .06, 'sine', .018); }, 55);
+    if (this.muted) return;
+    if (!this.ctx) this.init();
+    if (this.ctx?.state === 'suspended') this.ctx.resume().catch(() => {});
+    const audio = this.pickupAudio;
+    audio.muted = false;
+    audio.volume = .98;
+    try { audio.currentTime = 0; } catch {}
+    const playback = audio.play();
+    if (playback?.catch) playback.catch(() => this.pickupFallback());
+    else if (!playback) this.pickupFallback();
+  },
+  pickupFallback() {
+    if (this.muted) return;
+    if (!this.ctx) this.init();
+    if (this.ctx?.state === 'suspended') this.ctx.resume().catch(() => {});
+    this.tone(660, 1180, .12, 'triangle', .12);
+    setTimeout(() => { if (!this.muted) this.tone(1180, 1560, .10, 'sine', .075); }, 75);
   },
   ricochet() {
     if (!this.active()) return;
@@ -5878,7 +5928,12 @@ const sound = {
     this.noiseBurst(alt ? 130 : 105, .018, .065, 'lowpass');
   },
   hit() { if (!this.active()) return; this.playSample('hit', .8); this.tone(960, 1400, .055, 'triangle', .025); },
-  killFeedback() { if (!this.active()) return; this.playSample('kill', .9); },
+  killFeedback(elite = false) {
+    if (!this.active()) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    const recorded = this.playSample(elite ? 'kill' : 'commonKill', elite ? .9 : 1.25);
+    if (!recorded && !elite) this.playSample('kill', .9);
+  },
   hurt() {
     if (!this.active()) return;
     this.noiseBurst(420, .23, .4, 'lowpass');
@@ -5894,6 +5949,7 @@ const sound = {
   toggle() {
     this.muted = !this.muted;
     if (this.master) this.master.gain.value = this.muted ? 0 : .22;
+    this.pickupAudio.muted = this.muted;
     if (this.muted) this.bgm.pause(); else this.bgm.play().catch(() => {});
     ui.audioBtn.classList.toggle('off', this.muted);
     ui.audioLabel.textContent = this.muted ? 'AUDIO OFF' : 'AUDIO ON';
@@ -7638,7 +7694,11 @@ function updatePlayer(dt) {
     recoilPitch = damp(recoilPitch, 0, 3.4, recoilDt);
     recoilYaw = damp(recoilYaw, 0, 3.4, recoilDt);
   }
-  camera.rotation.set(pitch + recoilPitch, yaw + recoilYaw, -player.velocity.x * .003);
+  killShake = damp(killShake, 0, 12, dt);
+  const shakeNow = performance.now();
+  const shakePitch = Math.sin(shakeNow * .052 + killShakeSeed) * killShake;
+  const shakeYaw = Math.cos(shakeNow * .043 + killShakeSeed * 1.37) * killShake * .65;
+  camera.rotation.set(pitch + recoilPitch + shakePitch, yaw + recoilYaw + shakeYaw, -player.velocity.x * .003);
   if (gameState === 'playing') runElapsed += dt * timeFlow;
   if (gameState === 'playing' && runElapsed - elapsedPaint > .005) {
     elapsedPaint = runElapsed;

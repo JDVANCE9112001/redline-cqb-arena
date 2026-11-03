@@ -2,8 +2,9 @@
 
 A browser 3D survival FPS. Time slows to 1/30 speed while the player stands still.
 Survive eight waves to win. Ordinary enemies break in one hit; elites take two body
-hits or one headshot. Elites carry rifles; later waves add MAC-10s, rifles, and
-shotguns to the regular enemy loadouts. Weapons have one finite supply and no manual reload: defeat an
+hits or one headshot. Elites usually carry rifles; the first wave-two elite
+guarantees an M1014 drop, and later elites may carry one. Shotguns appear more
+often in regular enemy loadouts as the waves progress. Weapons have one finite supply and no manual reload: defeat an
 enemy, pick up its weapon, or throw your current weapon with Q. Drops disappear
 after 30 seconds. The shotgun has six shells, fires four pellets, and cycles one
 shell at a time automatically.
@@ -18,7 +19,8 @@ to auto-fire the MAC-10 or rifle. Q throws your current weapon, E picks up a wea
 Escape pauses, R restarts, and M mutes.
 
 The Pistol_2, AssaultRifle2_2, and modified Shotgun_ShortStock models come from
-Quaternius's Ultimate Gun Pack (CC0 1.0). The enemy face image was supplied by the game's owner.
+Quaternius's Ultimate Gun Pack (CC0 1.0). The M1014 model and common-enemy kill
+sound are from the supplied handoff package. The enemy face image was supplied by the game's owner.
 
 ## 本地运行
 
