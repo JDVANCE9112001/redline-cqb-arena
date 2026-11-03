@@ -438,9 +438,9 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
   </div>
 
   <div class="weapon-readout" id="weapon-readout">
-    <div class="weapon-top"><span>FIELD PICKUP / NO RELOAD</span><b id="weapon-top-label">READY</b></div>
-    <div class="weapon-main"><i aria-hidden="true"></i><span id="weapon-state">左轮 · 7 / 7</span></div>
-    <div class="weapon-hint" id="weapon-hint">E 拾取武器 · Q / 右键近战</div>
+    <div class="weapon-top"><span>ONE MAGAZINE / NO RESUPPLY</span><b id="weapon-top-label">READY</b></div>
+    <div class="weapon-main"><i aria-hidden="true"></i><span id="weapon-state">左轮 · 6 / 6</span></div>
+    <div class="weapon-hint" id="weapon-hint">Q 投掷 · E 拾取</div>
   </div>
   <div class="hitbox-hud" id="hitbox-hud" aria-live="polite">
     <i class="hitbox-icon" aria-hidden="true"></i><b>HITBOX · 0.42M</b><span>H 显示碰撞球</span><strong id="hitbox-threat">SAFE</strong>
@@ -449,7 +449,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
   <div class="controls">
     <div>
       <div class="key-row"><span>移动</span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
-      <div class="key-row"><span>射击</span><kbd>LMB</kbd><span>·</span><span>近战</span><kbd>Q</kbd><span>/</span><kbd>RMB</kbd><span>·</span><span>拾取</span><kbd>E</kbd></div>
+      <div class="key-row"><span>射击</span><kbd>LMB</kbd><span>·</span><span>投掷武器</span><kbd>Q</kbd><span>·</span><span>拾取</span><kbd>E</kbd></div>
       <div class="key-row"><span>暂停</span><kbd>ESC</kbd><span>·</span><span>重开</span><kbd>R</kbd><span>·</span><span>碰撞球</span><kbd>H</kbd><span>·</span><span>静音</span><kbd>M</kbd></div>
     </div>
     <button class="audio-chip" id="audio-btn" type="button" title="切换声音 (M)"><i class="audio-dot"></i><span id="audio-label">AUDIO ON</span></button>
@@ -476,7 +476,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <div class="kicker">TIME BENDS AROUND YOU</div>
     <h1><span class="red">RED</span><span class="shift">SHIFT</span></h1>
     <div class="intro-jp">ミ ラ ク シ ス</div>
-    <p class="intro-copy">在更大的战斗地图中迎击 8 波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，开火和近战都不会</b>。初始左轮只有 7 发，不可换弹；敌人会携带不同武器，击杀后掉落，按 E 拾取并替换当前武器。步枪精英需要两次身体命中，爆头一击击碎。掉落武器 30 秒后消失。</p>
+    <p class="intro-copy">在更大的战斗地图中迎击 8 波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，射击、装填、投掷和碎块都遵循时间流速</b>。初始左轮只有 6 发，不能换弹；普通敌人一枪击碎，精英身体两枪、爆头一枪。第二波首名精英必带散弹枪，后续精英有概率携带。武器只能靠击杀拾取维持，Q 可投掷当前武器，E 拾取，掉落 30 秒后消失。</p>
     <div class="intro-actions">
       <button class="enter-btn" id="enter-btn" type="button"><span>进入模拟</span><span>ENTER SIMULATION</span><span class="arrow">↗</span></button>
       <div class="enter-note"><b>点击画面锁定鼠标</b>CLICK ANYWHERE TO ENGAGE</div>
@@ -485,7 +485,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
       <span><kbd>WASD</kbd>移动</span>
       <span><kbd>MOUSE</kbd>瞄准</span>
       <span><kbd>LMB</kbd>射击</span>
-      <span><kbd>Q / RMB</kbd>近战</span><span><kbd>E</kbd>拾取武器</span>
+      <span><kbd>Q</kbd>投掷武器</span><span><kbd>E</kbd>拾取武器</span>
       <span><kbd>H</kbd>碰撞球</span><span><kbd>ESC</kbd>暂停</span>
     </div>
   </div>
@@ -650,30 +650,29 @@ let hitboxThreatState = 'SAFE';
 const composerState = { composer: null, bloom: null };
 let weapons = null;
 let shotgunView = null;
-const SHOTGUN_PELLETS = 16;
+const SHOTGUN_PELLETS = 4;
 let eliteKills = 0;
 let currentWeapon = 'revolver';
 const WEAPON_DEFS = {
-  revolver: { label: '左轮', maxAmmo: 7, interval: .34, role: '重型单发', spreadBase: .08, spreadStep: 2, spreadMax: 9, recoil: [.014, .020], modelKey: 'revolver' },
+  revolver: { label: '左轮', maxAmmo: 6, interval: .42, role: '单发 · 不可换弹', spreadBase: .08, spreadStep: 2, spreadMax: 9, recoil: [.014, .020], modelKey: 'revolver' },
   mac10: { label: 'MAC-10', maxAmmo: 20, interval: .095, role: '高速连射 · 后坐较强', spreadBase: .45, spreadStep: 1.85, spreadMax: 8.5, recoil: [.006, .011], modelKey: 'mac10' },
   rifle: { label: '步枪', maxAmmo: 15, interval: .21, role: '精准连射 · 射速较慢', spreadBase: .025, spreadStep: .48, spreadMax: 2.8, recoil: [.004, .008], modelKey: 'rifle' },
-  shotgun: { label: '散弹枪', maxAmmo: 6, interval: .52, role: '16 弹丸', pellets: 16, modelKey: 'shotgun' }
+  shotgun: { label: '散弹枪', maxAmmo: 6, interval: .65, reloadTime: .65, role: '4 弹丸 · 逐发自动装填', pellets: 4, spread: 4.6, modelKey: 'shotgun' }
 };
 let equippedWeapon = { kind: 'revolver', ammo: 6, maxAmmo: 6 };
 let weaponDrops = [];
 let fireHeld = false;
-let lastMeleeAt = -Infinity;
+let shotQueued = false;
 let lastShotRealAt = -Infinity;
+let shotgunReloadUntil = -Infinity;
+let shotgunReloadHudActive = false;
 let lastPickupHint = '';
 let playerLight = null;
 
 function enemyWeaponForWave(wave, elite, index) {
-  if (elite) return 'rifle';
-  const roll = (index * 7 + Math.floor(Math.random() * 7)) % 7;
-  if (wave <= 2) return 'revolver';
-  if (wave <= 4) return roll < 2 ? 'mac10' : 'revolver';
-  if (wave <= 6) return roll < 2 ? 'rifle' : 'mac10';
-  return roll < 2 ? 'shotgun' : roll < 5 ? 'rifle' : 'mac10';
+  if (!elite) return 'revolver';
+  if (wave === 2 && index === 0) return 'shotgun';
+  return wave >= 3 && Math.random() < .4 ? 'shotgun' : 'revolver';
 }
 
 /* --------------------------------------------------------------------------
@@ -2636,7 +2635,9 @@ class Enemy {
     this.duckTimer = 0;
     this.reloading = false;
     this.reloadTimer = 0;
-    this.mag = this.attrs.mag;
+    // Enemies have no reload cycle in the handoff rules; their own weapon
+    // cadence is controlled by fireGapTimer instead.
+    this.mag = Infinity;
     this.burstLeft = 0;
     this.burstTimer = 0;
     this.fireGapTimer = rand(.35, .8) + (campaign.level <= 4 ? .25 : 0);
@@ -2803,7 +2804,7 @@ class Enemy {
     gun.position.set(0, -.015, .03);
     const weaponSource = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
       : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
-        : GAME_ASSETS.rifleObject;
+        : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
     const weaponVisual = centeredWeaponModel(weaponSource, .53, -Math.PI / 2);
     if (weaponVisual) {
       weaponVisual.position.set(0, .015, .07);
@@ -2830,12 +2831,15 @@ class Enemy {
     if (oldGun?.parent) oldGun.parent.remove(oldGun);
     const gun = new THREE.Group();
     gun.position.set(.12, .31, .31);
-    if (GAME_ASSETS.rifleObject) {
-      const rifle = GAME_ASSETS.rifleObject.clone(true);
-      rifle.scale.setScalar(.22);
-      rifle.rotation.y = -Math.PI / 2 + .27;
-      rifle.position.set(0, -.015, .025);
-      gun.add(rifle);
+    const eliteWeapon = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
+      : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
+        : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
+    if (eliteWeapon) {
+      const model = eliteWeapon.clone(true);
+      model.scale.setScalar(this.loadout.kind === 'shotgun' ? .31 : this.loadout.kind === 'revolver' ? .38 : .22);
+      model.rotation.y = -Math.PI / 2 + .27;
+      model.position.set(0, -.015, .025);
+      gun.add(model);
     } else {
       const body = new THREE.Mesh(new THREE.BoxGeometry(.10, .085, .49), enemyGunMat);
       const barrel = new THREE.Mesh(new THREE.BoxGeometry(.038, .038, .27), enemyAssetGunMat);
@@ -2847,7 +2851,7 @@ class Enemy {
       gun.add(body, barrel, stock, magazine);
     }
     this.gunMuzzle = new THREE.Object3D();
-    this.gunMuzzle.position.set(.16, .04, GAME_ASSETS.rifleObject ? 1.01 : .76);
+    this.gunMuzzle.position.set(.16, .04, eliteWeapon ? (this.loadout.kind === 'shotgun' ? .91 : 1.01) : .76);
     gun.add(this.gunMuzzle);
     this.gunMuzzle.add(glow);
     glow.position.set(0, 0, 0);
@@ -3077,11 +3081,8 @@ class Enemy {
   }
 
   startBurst() {
-    const gentleHouse = ROOMS.current?.name === 'HOUSE_V2';
-    this.burstLeft = this.loadout.kind === 'shotgun' ? 1
-      : this.loadout.kind === 'mac10' ? (gentleHouse ? 2 : 4)
-        : gentleHouse ? randInt(1, 2) : this.elite ? randInt(campaign.level <= 4 ? 2 : 3, campaign.level <= 4 ? 3 : 4) : randInt(2, 3);
-    this.burstTimer = gentleHouse ? .11 : this.elite ? .035 : .045;
+    this.burstLeft = 1;
+    this.burstTimer = 0;
     this.ducking = false;
   }
 
@@ -3089,8 +3090,7 @@ class Enemy {
     this.burstLeft = 0;
     this.ducking = true;
     this.duckTimer = Math.max(.18, this.attrs.hide * rand(.82, 1.18));
-    this.fireGapTimer = this.attrs.fireGap * rand(.9, 1.1);
-    if (this.mag <= 0) this.startReload();
+    this.fireGapTimer = (this.loadout.kind === 'shotgun' ? 1 : .5) * rand(.9, 1.1);
   }
 
   startReload() {
@@ -3174,7 +3174,7 @@ class Enemy {
           this.firePistol(playerPos);
           this.mag--;
           this.burstLeft--;
-          this.burstTimer = this.elite ? .085 : .12;
+          this.burstTimer = 0;
           if (this.burstLeft <= 0) this.finishBurst();
         } else {
           this.finishBurst();
@@ -3269,7 +3269,6 @@ class Enemy {
     this.group.updateMatrixWorld(true);
     const start = new THREE.Vector3();
     this.gunMuzzle.getWorldPosition(start);
-    sound.enemyShot();
     addMuzzleFlash(start, 0xffb08a);
     const target = playerPos.clone();
     target.y = playerPos.y - .04;
@@ -3282,13 +3281,20 @@ class Enemy {
 
     const dirs = [dir];
     if (this.loadout.kind === 'shotgun') {
+      sound.enemyShotgun(start);
       dirs.length = 0;
       const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
       const up = new THREE.Vector3().crossVectors(right, dir).normalize();
-      for (let i = 0; i < 6; i++) {
-        const a = i * Math.PI * 2 / 6;
-        dirs.push(dir.clone().addScaledVector(right, Math.cos(a) * .07).addScaledVector(up, Math.sin(a) * .07).normalize());
+      const spread = Math.tan(THREE.MathUtils.degToRad(3.6));
+      const spin = Math.random() * Math.PI * 2;
+      for (let i = 0; i < SHOTGUN_PELLETS; i++) {
+        const a = spin + i * 2.399963229728653;
+        const radius = Math.sqrt((i + .5) / SHOTGUN_PELLETS) * spread;
+        dirs.push(dir.clone().addScaledVector(right, Math.cos(a) * radius).addScaledVector(up, Math.sin(a) * radius).normalize());
       }
+      setTimeout(() => sound.enemyShotgunReload(start), 120);
+    } else {
+      sound.enemyShot(start);
     }
     for (const shotDir of dirs) {
       if (enemyProjectiles.length >= 96) removeProjectile(enemyProjectiles[0]);
@@ -3806,7 +3812,7 @@ function spawnWeaponDrop(spec, x, z, { expiresIn = 30000, replace = false } = {}
   scene.add(root);
   const drop = {
     kind: spec.kind,
-    ammo: clamp(Math.floor(spec.ammo ?? WEAPON_DEFS[spec.kind].maxAmmo), 1, WEAPON_DEFS[spec.kind].maxAmmo),
+    ammo: clamp(Math.floor(spec.ammo ?? WEAPON_DEFS[spec.kind].maxAmmo), 0, WEAPON_DEFS[spec.kind].maxAmmo),
     maxAmmo: WEAPON_DEFS[spec.kind].maxAmmo,
     root, halo, haloMat, baseY: y, expiresAt: performance.now() + expiresIn, bornAt: performance.now()
   };
@@ -3826,8 +3832,7 @@ function removeWeaponDrop(index) {
 function dropEnemyWeapon(enemy) {
   const spec = enemy?.deathDropSpec;
   if (!spec) return;
-  const remaining = Number.isFinite(enemy.mag) ? Math.max(1, enemy.mag) : spec.ammo;
-  spawnWeaponDrop({ kind: spec.kind, ammo: Math.min(spec.ammo, remaining) }, enemy.group.position.x, enemy.group.position.z);
+  spawnWeaponDrop({ kind: spec.kind, ammo: spec.ammo }, enemy.group.position.x, enemy.group.position.z);
 }
 
 function updateWeaponDrops() {
@@ -3864,7 +3869,7 @@ function tryPickupWeapon() {
   const picked = weaponDrops[best];
   const old = { ...equippedWeapon };
   removeWeaponDrop(best);
-  if (old.ammo > 0) spawnWeaponDrop(old, player.position.x + Math.sin(yaw) * .55, player.position.z - Math.cos(yaw) * .55);
+  if (pistolArmed) spawnWeaponDrop(old, player.position.x + Math.sin(yaw) * .55, player.position.z - Math.cos(yaw) * .55);
   equippedWeapon = { kind: picked.kind, ammo: picked.ammo, maxAmmo: picked.maxAmmo };
   currentWeapon = picked.kind;
   applyViewWeaponModel(currentWeapon);
@@ -3914,7 +3919,7 @@ function defeatEnemy(enemy, hitPoint, normal = null, impact = null) {
     eliteKills++;
   }
   setWeaponHud();
-  sound.killFeedback();
+  sound.killFeedback(point);
   for (const other of activeEnemies) {
     if (other === enemy || !other.alive) continue;
     if (other.group.position.distanceTo(enemy.group.position) < 11) other.alertFromAlly(point);
@@ -5193,6 +5198,7 @@ function startCampaign() {
   for (let i = weaponDrops.length - 1; i >= 0; i--) removeWeaponDrop(i);
   equippedWeapon = { kind: 'revolver', ammo: WEAPON_DEFS.revolver.maxAmmo, maxAmmo: WEAPON_DEFS.revolver.maxAmmo };
   currentWeapon = 'revolver';
+  pistolArmed = true;
   applyViewWeaponModel(currentWeapon);
   lastShotRealAt = -Infinity;
   updateWeaponVisibility();
@@ -5204,6 +5210,9 @@ function startCampaign() {
   campaign.levelSpawned = 0;
   campaign.firstLevelFromStart = true;
   lastShotSim = -999;
+  shotQueued = false;
+  shotgunReloadUntil = -Infinity;
+  shotgunReloadHudActive = false;
   shotStreak = 0;
   playerSpreadDeg = .08;
   shotHistory.length = 0;
@@ -5410,12 +5419,46 @@ function setWeaponHud(mode = 'armed') {
   const def = WEAPON_DEFS[equippedWeapon?.kind || currentWeapon];
   if (!def) return;
   const ammo = Math.max(0, equippedWeapon?.ammo ?? 0);
-  ui.weaponReadout.classList.toggle('throw', ammo === 0);
-  ui.weaponTopLabel.textContent = ammo > 0 ? (equippedWeapon.kind === 'mac10' ? 'HIGH ROF' : equippedWeapon.kind === 'rifle' ? 'ACCURATE' : equippedWeapon.kind === 'shotgun' ? '16 PELLETS' : 'SINGLE SHOT') : 'EMPTY';
+  ui.weaponReadout.classList.toggle('throw', !pistolArmed || ammo === 0 || mode === 'flying');
+  if (!pistolArmed || mode === 'flying') {
+    ui.weaponTopLabel.textContent = mode === 'flying' ? 'AIRBORNE' : 'PICKUP';
+    ui.weaponState.textContent = mode === 'flying' ? `${def.label} · 已投掷` : '空手 · 需要拾取武器';
+    ui.weaponHint.textContent = '落地后靠近按 E 拾取';
+    return;
+  }
+  if (currentWeapon === 'shotgun' && shotgunReloading()) {
+    ui.weaponTopLabel.textContent = 'RELOAD';
+    ui.weaponState.textContent = `霰弹枪 · ${ammo} / ${def.maxAmmo}`;
+    ui.weaponHint.textContent = '逐发自动装填 · 仍可移动';
+    return;
+  }
+  ui.weaponTopLabel.textContent = ammo > 0
+    ? (currentWeapon === 'shotgun' ? '4 PELLETS' : 'SINGLE SHOT')
+    : 'EMPTY';
   ui.weaponState.textContent = `${def.label} · ${ammo} / ${equippedWeapon.maxAmmo}`;
   ui.weaponHint.textContent = ammo > 0
-    ? `${def.role || '单发散射'} · E 拾取`
-    : '弹匣已空 · 近战击杀或 E 拾取敌人武器';
+    ? `${def.role || '单发'} · Q 投掷 · E 拾取`
+    : '空仓 · Q 投掷 · E 拾取';
+}
+
+function shotgunReloading() {
+  return currentWeapon === 'shotgun' && shotgunReloadHudActive &&
+    runElapsed < shotgunReloadUntil && equippedWeapon.ammo > 0;
+}
+
+function startShotgunReload(def = WEAPON_DEFS.shotgun) {
+  if (!pistolArmed || currentWeapon !== 'shotgun' || equippedWeapon.ammo <= 0) return;
+  shotgunReloadUntil = runElapsed + (def.reloadTime || .65);
+  shotgunReloadHudActive = true;
+  setWeaponHud();
+  sound.shotgunReload();
+}
+
+function updateShotgunReload() {
+  if (!shotgunReloadHudActive || runElapsed < shotgunReloadUntil) return;
+  shotgunReloadHudActive = false;
+  shotgunReloadUntil = -Infinity;
+  setWeaponHud();
 }
 
 function setProgressText() {
@@ -5646,8 +5689,8 @@ function onAllEnemiesDown() {
    -------------------------------------------------------------------------- */
 const sound = {
   ctx: null, master: null, muted: false, hum: null,
-  samples: { gunshot: null, glass: null, enemyShot: null, hit: null, kill: null }, samplesLoading: false,
   bgm: new Audio('audio/guardians-bgm.mp3'),
+  samples: { revolverShot: null, revolverEmpty: null, shotgunShot: null, shotgunReload: null, gunEmpty: null, glass: null, hit: null, kill: null }, samplesLoading: false,
   init() {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -5684,10 +5727,17 @@ const sound = {
       const bytes = await response.arrayBuffer();
       return new Promise((resolve, reject) => this.ctx.decodeAudioData(bytes, resolve, reject));
     };
-    const names = ['gunshot', 'glass', 'enemyShot', 'hit', 'kill'];
-    const paths = ['audio/player-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3'];
-    const results = await Promise.allSettled(paths.map(load));
-    results.forEach((result, i) => { if (result.status === 'fulfilled') this.samples[names[i]] = result.value; });
+    const names = ['revolverShot', 'revolverEmpty', 'shotgunShot', 'shotgunReload', 'gunEmpty', 'glass', 'hit', 'kill'];
+    const paths = [
+      'audio/revolver-shot-first.wav', 'audio/revolver-empty-first.wav',
+      'audio/shotgun-shot-first.wav', 'audio/153560__splicesound__winchester-rifle-cock-reload.wav',
+      'audio/858445__smillandwelson__p38-slide-release-1-empty.mp3',
+      'audio/objective-break.mp3', 'audio/enemy-hit.mp3', 'audio/glass-death-4s.wav'
+    ];
+    await Promise.allSettled(names.map(async (name, i) => {
+      try { this.samples[name] = await load(paths[i]); }
+      catch (error) { console.warn(`[RED SHIFT] sound unavailable: ${paths[i]}`, error); }
+    }));
   },
   playSample(key, gain = 1, rate = 1, delay = 0) {
     if (!this.active() || !this.samples[key]) return false;
@@ -5700,6 +5750,20 @@ const sound = {
     src.connect(g);
     g.connect(this.master);
     src.start(now);
+    return true;
+  },
+  playSampleSpatial(key, position, gain = 1, rate = 1) {
+    if (!this.active() || !this.samples[key] || !position) return false;
+    const dx = position.x - camera.position.x, dy = position.y - camera.position.y, dz = position.z - camera.position.z;
+    const distance = Math.max(.001, Math.hypot(dx, dy, dz));
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    const panner = this.ctx.createStereoPanner();
+    panner.pan.value = THREE.MathUtils.clamp((dx * right.x + dy * right.y + dz * right.z) / distance, -1, 1) * .72;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = Math.max(1300, 9000 / (1 + distance * .08));
+    const src = this.ctx.createBufferSource(); src.buffer = this.samples[key]; src.playbackRate.value = rate;
+    const g = this.ctx.createGain(); g.gain.value = Math.max(.045, gain / (1 + distance * .16));
+    src.connect(g); g.connect(filter); filter.connect(panner); panner.connect(this.master); src.start();
     return true;
   },
   makeNoise() {
@@ -5736,16 +5800,15 @@ const sound = {
   },
   shotgunShot() {
     if (!this.active()) return;
-    this.playSample('gunshot', .92, .72);
+    const recorded = this.playSample('shotgunShot', 1.0, 1.0);
+    if (recorded) return;
     this.noiseBurst(680, .20, .21, 'lowpass');
     this.noiseBurst(2600, .075, .05, 'highpass');
     this.tone(110, 38, .25, 'triangle', .07);
   },
   pistolShot() {
     if (!this.active()) return;
-    // Primary layer: a recorded pistol report, pitched down slightly so the
-    // .50-caliber viewmodel has the deeper Desert Eagle body.
-    const recorded = this.playSample('gunshot', 1.0, .93);
+    const recorded = this.playSample('revolverShot', 1.0, 1.0);
     if (recorded) {
       this.noiseBurst(2800, .04, .018, 'highpass');
       this.tone(160, 48, .17, 'triangle', .045);
@@ -5780,13 +5843,34 @@ const sound = {
     }
     if (!recorded) this.tone(255, 62, .2, 'triangle', .03);
   },
-  enemyShot() {
+  enemyShot(position = null) {
     if (!this.active()) return;
-    const recorded = this.playSample('enemyShot', .45, 1.0);
+    const recorded = position
+      ? this.playSampleSpatial('revolverShot', position, .58, 1.0)
+      : this.playSample('revolverShot', .32, 1.0);
     if (recorded) return;
     this.noiseBurst(2400, .085, .035, 'highpass');
     this.noiseBurst(780, .065, .1, 'bandpass');
     this.tone(210, 70, .1, 'triangle', .05);
+  },
+  enemyShotgun(position = null) {
+    if (!this.active()) return;
+    const recorded = position
+      ? this.playSampleSpatial('shotgunShot', position, .54, 1.0)
+      : this.playSample('shotgunShot', .3, 1.0);
+    if (!recorded) this.shotgunShot();
+  },
+  enemyShotgunReload(position = null) {
+    if (!this.active()) return;
+    const recorded = position
+      ? this.playSampleSpatial('shotgunReload', position, .34, .92)
+      : this.playSample('shotgunReload', .24, .92);
+    if (!recorded) this.noiseBurst(1000, .015, .1, 'bandpass');
+  },
+  shotgunReload() {
+    if (!this.active()) return;
+    const recorded = this.playSample('shotgunReload', .88, timeFlow < .22 ? .74 : 1.0);
+    if (!recorded) { this.noiseBurst(1100, .025, .12, 'bandpass'); this.tone(360, 140, .12, 'triangle', .02); }
   },
   throwWeapon() {
     if (!this.active()) return;
@@ -5803,8 +5887,10 @@ const sound = {
     this.noiseBurst(2300, .025, .045, 'highpass');
     this.tone(1800, 620, .08, 'sawtooth', .018);
   },
-  dryFire() {
+  dryFire(kind = currentWeapon) {
     if (!this.active()) return;
+    const sample = kind === 'shotgun' ? 'gunEmpty' : 'revolverEmpty';
+    if (this.playSample(sample, .55, 1.0)) return;
     this.noiseBurst(2400, .022, .022, 'highpass');
     this.tone(820, 410, .035, 'triangle', .014);
   },
@@ -5813,7 +5899,11 @@ const sound = {
     this.noiseBurst(alt ? 130 : 105, .018, .065, 'lowpass');
   },
   hit() { if (!this.active()) return; this.playSample('hit', .8); this.tone(960, 1400, .055, 'triangle', .025); },
-  killFeedback() { if (!this.active()) return; this.playSample('kill', .9); },
+  killFeedback(position = null) {
+    if (!this.active()) return;
+    if (position && this.playSampleSpatial('kill', position, .9, 1.0)) return;
+    this.playSample('kill', .9);
+  },
   hurt() {
     if (!this.active()) return;
     this.noiseBurst(420, .23, .4, 'lowpass');
@@ -6570,30 +6660,18 @@ function applyShotSpread(dir, degrees) {
 function shoot() {
   if (gameState !== 'playing' || !isLocked) return;
   if (currentWeapon === 'shotgun') { fireShotgun(); return; }
-  const now = performance.now();
   const def = WEAPON_DEFS[equippedWeapon.kind];
-  if (!def || equippedWeapon.ammo <= 0) {
+  if (!def || !pistolArmed || !weapons || equippedWeapon.ammo <= 0) {
+    shotQueued = false;
+    const now = performance.now();
     if (now - lastDryAt > 280) { lastDryAt = now; sound.dryFire(); }
     setWeaponHud();
     return;
   }
-  const shotGap = now - lastShotRealAt;
-  if (shotGap < def.interval * 1000) return;
-  if (shotGap > 430) shotStreak = 0;
-  equippedWeapon.ammo--;
-  lastShotRealAt = now;
-  pistolArmed = equippedWeapon.ammo > 0;
-  shots++;
-  if (currentWeapon === 'rifle') sound.enemyShot();
-  else sound.pistolShot();
-  alertEnemies(camera.position);
-  if (weapons) {
-    weapons.recoil = currentWeapon === 'rifle' ? .62 : currentWeapon === 'mac10' ? .72 : 1;
-    weapons.slideKick = currentWeapon === 'rifle' ? .58 : currentWeapon === 'mac10' ? .7 : 1;
-    weapons.flashTimer = .05;
-    weapons.flashGroup.visible = true;
-    weapons.flashMat.opacity = .95;
-  }
+  // Buffer a quick tap until the weapon's simulation-time cadence is ready.
+  // This prevents a short click inside the cooldown window from disappearing.
+  if (runElapsed - lastShotSim < def.interval) { shotQueued = true; return; }
+  if (runElapsed - lastShotSim > .45) shotStreak = 0;
   camera.updateMatrixWorld(true);
   scene.updateMatrixWorld(true);
   raycaster.far = 110;
@@ -6619,14 +6697,26 @@ function shoot() {
   const spreadDeg = shotStreak === 0 ? def.spreadBase : Math.min(def.spreadMax, def.spreadBase + def.spreadStep * shotStreak);
   playerSpreadDeg = spreadDeg;
   applyShotSpread(dir, spreadDeg);
-  spawnPlayerBullet(muzzleWorld, dir);
+  if (!spawnPlayerBullet(muzzleWorld, dir)) return;
+  equippedWeapon.ammo = Math.max(0, equippedWeapon.ammo - 1);
+  shotQueued = false;
+  shots++;
+  lastShotRealAt = performance.now();
+  lastShotSim = runElapsed;
+  sound.pistolShot();
+  alertEnemies(camera.position);
+  weapons.recoil = 1;
+  weapons.slideKick = 1;
+  weapons.flashTimer = .05;
+  weapons.flashGroup.visible = true;
+  weapons.flashMat.opacity = .95;
+  pistolArmed = true;
   shotHistory.push({ sim: runElapsed, real: performance.now() / 1000, spread: spreadDeg });
   if (shotHistory.length > 60) shotHistory.shift();
   shotStreak = Math.min(6, shotStreak + 1);
-  lastShotSim = runElapsed;
 
-  recoilPitch = Math.min(currentWeapon === 'mac10' ? .14 : .095, recoilPitch + rand(def.recoil[0], def.recoil[1]));
-  recoilYaw += rand(currentWeapon === 'mac10' ? -.012 : -.006, currentWeapon === 'mac10' ? .012 : .006);
+  recoilPitch = Math.min(.095, recoilPitch + rand(def.recoil[0], def.recoil[1]));
+  recoilYaw += rand(-.006, .006);
   recoilHold = .08;
   updateWeaponVisibility();
   setWeaponHud();
@@ -6635,20 +6725,18 @@ function shoot() {
 }
 
 function fireShotgun() {
-  if (!shotgunView || equippedWeapon.kind !== 'shotgun') return;
+  if (!shotgunView || equippedWeapon.kind !== 'shotgun' || !pistolArmed) return;
   const now = performance.now();
   if (equippedWeapon.ammo <= 0) {
+    shotQueued = false;
     if (now - lastDryAt > 280) { lastDryAt = now; sound.dryFire(); }
     setWeaponHud();
     return;
   }
-  if (now - lastShotRealAt < WEAPON_DEFS.shotgun.interval * 1000) return;
-  equippedWeapon.ammo--;
-  lastShotRealAt = now;
-  pistolArmed = equippedWeapon.ammo > 0;
-  shots++;
-  sound.shotgunShot();
-  alertEnemies(camera.position);
+  if (shotgunReloading() || runElapsed - lastShotSim < WEAPON_DEFS.shotgun.interval) {
+    shotQueued = true;
+    return;
+  }
   shotgunView.recoil = 1;
   shotgunView.flashTimer = .09;
   shotgunView.flashGroup.visible = true;
@@ -6675,7 +6763,8 @@ function fireShotgun() {
   const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
   const up = new THREE.Vector3().crossVectors(right, forward).normalize();
   const spin = Math.random() * Math.PI * 2;
-  const spread = Math.tan(THREE.MathUtils.degToRad(6.5));
+  const spread = Math.tan(THREE.MathUtils.degToRad(WEAPON_DEFS.shotgun.spread));
+  let spawned = 0;
   for (let i = 0; i < SHOTGUN_PELLETS; i++) {
     const radius = Math.sqrt((i + .5) / SHOTGUN_PELLETS) * spread;
     const angle = spin + i * 2.399963229728653;
@@ -6683,18 +6772,28 @@ function fireShotgun() {
       .addScaledVector(right, Math.cos(angle) * radius)
       .addScaledVector(up, Math.sin(angle) * radius)
       .normalize();
-    spawnPlayerBullet(muzzle, direction, .65);
+    if (spawnPlayerBullet(muzzle, direction, .8)) spawned++;
   }
+  if (!spawned) return;
+  equippedWeapon.ammo = Math.max(0, equippedWeapon.ammo - 1);
+  shotQueued = false;
+  shots++;
+  lastShotRealAt = performance.now();
+  sound.shotgunShot();
+  alertEnemies(camera.position);
   lastShotSim = runElapsed;
   shotStreak = 0;
-  playerSpreadDeg = 6.5;
+  playerSpreadDeg = WEAPON_DEFS.shotgun.spread;
   recoilPitch = Math.min(.18, recoilPitch + .065);
   recoilYaw += rand(-.016, .016);
   recoilHold = .16;
+  pistolArmed = true;
+  shotgunView.pumpTimer = .28;
   updateWeaponVisibility();
   setWeaponHud();
   ui.crosshair.style.transform = 'translate(-50%,-50%) scale(1.34)';
   setTimeout(() => { ui.crosshair.style.transform = 'translate(-50%,-50%) scale(1)'; }, 120);
+  if (equippedWeapon.ammo > 0) startShotgunReload();
 }
 
 function performMelee() {
@@ -6739,7 +6838,9 @@ function spawnTestEnemyShot(from, to) {
 }
 
 function spawnPlayerBullet(start, dir, size = 1) {
+  if (!start || !dir || dir.lengthSq() < .000001) return false;
   const visual = createBulletVisual(playerTracerMat, playerBulletGlowMat, size, playerTracerAuraMat);
+  if (!visual?.group) return false;
   visual.group.position.copy(start).addScaledVector(dir, .04);
   visual.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
   scene.add(visual.group);
@@ -6753,6 +6854,7 @@ function spawnPlayerBullet(start, dir, size = 1) {
     realLife: 3.5,
     travelled: 0
   });
+  return true;
 }
 
 function removePlayerBullet(i) {
@@ -6956,22 +7058,29 @@ function clearThrownPistol() {
 }
 
 function throwPistol() {
-  if (gameState !== 'playing' || !isLocked || !pistolArmed || !weapons) return;
+  if (gameState !== 'playing' || !isLocked || !pistolArmed) return;
+  const def = WEAPON_DEFS[currentWeapon] || WEAPON_DEFS.revolver;
+  const weaponView = currentWeapon === 'shotgun' ? shotgunView?.gun : weapons?.gun;
+  if (!weaponView) return;
+  const thrownSpec = { kind: currentWeapon, ammo: equippedWeapon.ammo, maxAmmo: equippedWeapon.maxAmmo };
   pistolArmed = false;
+  shotQueued = false;
+  shotgunReloadHudActive = false;
+  shotgunReloadUntil = -Infinity;
   throws++;
   updateWeaponVisibility();
-  weapons.flashGroup.visible = false;
+  if (weapons) weapons.flashGroup.visible = false;
+  if (shotgunView) shotgunView.flashGroup.visible = false;
   const root = new THREE.Group();
-  root.name = 'THROWN_PISTOL';
-  const clone = weapons.gun.clone(true);
+  root.name = 'THROWN_WEAPON';
+  const clone = weaponView.clone(true);
   clone.position.set(0, 0, 0);
   clone.rotation.set(0, 0, 0);
   clone.traverse(obj => {
     if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = false; obj.frustumCulled = true; }
     if (obj.isSprite) obj.frustumCulled = false;
   });
-  const cloneFlash = clone.getObjectByName('MUZZLE_FLASH');
-  if (cloneFlash) cloneFlash.visible = false;
+  clone.traverse(obj => { if (obj.name === 'MUZZLE_FLASH') obj.visible = false; });
   root.add(clone);
   const glow = addGlow(root, 0, .02, 0, .75, .75, 0xff9bad, .22, thrownGlowPool.take());
   const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -6981,7 +7090,7 @@ function throwPistol() {
   root.quaternion.copy(camera.quaternion);
   scene.add(root);
   thrownPistol = {
-    root, clone, glow,
+    root, clone, glow, ...thrownSpec,
     velocity: forward.clone().multiplyScalar(28).addScaledVector(up, 1.9),
     spinX: rand(-8.5, 8.5),
     spinZ: rand(-6, 6),
@@ -6993,49 +7102,36 @@ function throwPistol() {
   sound.throwWeapon();
   alertEnemies(camera.position);
   setWeaponHud('flying');
-  toast('手枪已投掷 · 命中红人可击杀', 1400);
+  toast(`${def.label}已投掷 · 命中可击杀`, 1400);
 }
 
 function finishThrownPistol(point) {
   if (!thrownPistol || thrownPistol.state !== 'flying') return;
   const p = thrownPistol;
-  p.state = 'dropped';
-  p.landedAt = performance.now();
-  p.velocity.set(0, 0, 0);
-  p.root.position.copy(point);
-  p.root.position.y = .12;
-  p.root.rotation.set(0, rand(0, Math.PI * 2), 0);
-  p.clone.rotation.set(.12, 0, (Math.random() < .5 ? -1 : 1) * Math.PI / 2);
-  p.glow.material.opacity = .4;
-
-  // A quiet pickup beacon makes the dropped weapon findable on the pale floor.
-  const fx = new THREE.Group();
-  fx.position.copy(p.root.position);
-  fx.position.y = 0;
-  const ringMat = pickupRingMat;
-  const ring = new THREE.Mesh(pickupRingGeo, ringMat);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = .026;
-  fx.add(ring);
-  const beamMat = pickupBeamMat;
-  const beam = new THREE.Mesh(pickupBeamGeo, beamMat);
-  beam.position.y = .8;
-  fx.add(beam);
-  scene.add(fx);
-  p.pickupFx = fx;
-  p.beacon = { ring, ringMat, beam, beamMat };
-  setWeaponHud('dropped');
+  const x = point?.x ?? p.root.position.x;
+  const z = point?.z ?? p.root.position.z;
+  spawnWeaponDrop({ kind: p.kind, ammo: p.ammo, maxAmmo: p.maxAmmo }, x, z);
+  clearThrownPistol();
+  setWeaponHud();
   sound.ricochet();
 }
 
 function pickupThrownPistol() {
   if (!thrownPistol || thrownPistol.state !== 'dropped') return;
+  const p = thrownPistol;
+  const spec = { kind: p.kind, ammo: p.ammo, maxAmmo: p.maxAmmo };
+  const x = p.root.position.x, z = p.root.position.z;
   clearThrownPistol();
+  const old = { ...equippedWeapon };
+  if (pistolArmed) spawnWeaponDrop(old, player.position.x, player.position.z);
+  equippedWeapon = { kind: spec.kind, ammo: spec.ammo, maxAmmo: spec.maxAmmo };
+  currentWeapon = spec.kind;
+  applyViewWeaponModel(currentWeapon);
   pistolArmed = true;
   updateWeaponVisibility();
-  setWeaponHud('armed');
+  setWeaponHud();
   sound.pickup();
-  toast('手枪已拾取', 900);
+  toast(`${WEAPON_DEFS[spec.kind].label}已拾取 · ${spec.ammo} 发`, 1100);
 }
 
 function closestThrownEnemyHit(from, to) {
@@ -7350,7 +7446,7 @@ addEventListener('keydown', e => {
   }
   if (gameState === 'playing' && isLocked && !e.repeat) {
     if (e.code === 'KeyE') tryPickupWeapon();
-    if (e.code === 'KeyQ') performMelee();
+    if (e.code === 'KeyQ') throwPistol();
     if (e.code === 'KeyH') togglePlayerHitbox();
   }
   if (e.code === 'Escape' && gameState === 'playing') {
@@ -7377,10 +7473,6 @@ document.addEventListener('mousemove', e => {
 document.addEventListener('mousedown', e => {
   if (gameState !== 'playing' || !isLocked) return;
   if (e.button === 0) { fireHeld = true; shoot(); }
-  else if (e.button === 2) {
-    e.preventDefault();
-    performMelee();
-  }
 });
 document.addEventListener('mouseup', e => { if (e.button === 0) fireHeld = false; });
 document.addEventListener('blur', () => { fireHeld = false; });
@@ -7635,7 +7727,8 @@ function animate() {
   if (gameState === 'playing') {
     updatePlayer(dt);
     updateWeaponDrops();
-    if (fireHeld && isLocked) shoot();
+    updateShotgunReload();
+    if ((fireHeld || shotQueued) && isLocked) shoot();
     if (campaign.phase === 'WAVE_BREAK') {
       const previousSecond = Math.ceil(waveCountdown);
       waveCountdown = Math.max(0, waveCountdown - dt);
@@ -7793,7 +7886,7 @@ window.__REDSHIFT__ = {
   get timeFlow() { return timeFlow; },
   get elapsed() { return runElapsed; },
   get recoil() { return { pitch: recoilPitch, yaw: recoilYaw, hold: recoilHold, viewPitch: camera.rotation.x }; },
-  get spread() { return { deg: +playerSpreadDeg.toFixed(3), streak: shotStreak, lastShotSim: +lastShotSim.toFixed(3), cooldown: Math.max(0, .135 - (runElapsed - lastShotSim)) }; },
+  get spread() { return { deg: +playerSpreadDeg.toFixed(3), streak: shotStreak, lastShotSim: +lastShotSim.toFixed(3), cooldown: Math.max(0, WEAPON_DEFS[currentWeapon].interval - (runElapsed - lastShotSim)) }; },
   get shotHistory() { return shotHistory.slice(); },
   get renderStats() { return { programs: renderer.info.programs?.length || 0, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }; },
   get colliderStats() { return { total: colliders.length, missingTop: colliders.filter(c => c.top === undefined).length, high: colliders.filter(c => c.top >= 1.5).length }; },
