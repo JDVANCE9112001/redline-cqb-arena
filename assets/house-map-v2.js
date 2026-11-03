@@ -22,6 +22,8 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
     studyFloor: new THREE.MeshStandardMaterial({ color: 0xc3cbce, roughness: .96 }),
     wood: new THREE.MeshStandardMaterial({ color: 0x9b8f7e, roughness: .82 }),
     fabric: new THREE.MeshStandardMaterial({ color: 0xaab6b5, roughness: .95 }),
+    studyFabric: new THREE.MeshStandardMaterial({ color: 0x40596d, roughness: .94 }),
+    rug: new THREE.MeshStandardMaterial({ color: 0x536b79, roughness: .98 }),
     light: new THREE.MeshStandardMaterial({ color: 0xf9f9f5, roughness: .92 }),
     red: new THREE.MeshStandardMaterial({ color: 0xb9162b, roughness: .72 }),
     glass: new THREE.MeshPhysicalMaterial({ color: 0xd9eef1, transparent: true, opacity: .28, depthWrite: false, roughness: .12, side: THREE.DoubleSide })
@@ -99,12 +101,12 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
     solid(m, w, h, d, x, h / 2, z);
     box(mat.light, w + .08, .06, d + .08, x, h + .03, z, { ignoreRay: true });
   };
-  const sofa = (x, z, w = 3.2, yaw = 0) => {
+  const sofa = (x, z, w = 3.2, yaw = 0, upholstery = mat.fabric) => {
     const parts = [[w, .62, 1.35, 0, .31, 0], [w, .82, .24, 0, .92, -.56], [w - .24, .18, .92, 0, .70, .02], [.26, .64, 1.32, -w / 2 + .13, .70, 0], [.26, .64, 1.32, w / 2 - .13, .70, 0]];
     for (const [pw, ph, pd, ox, py, oz] of parts) {
       const meshX = x + ox * Math.cos(yaw) + oz * Math.sin(yaw);
       const meshZ = z - ox * Math.sin(yaw) + oz * Math.cos(yaw);
-      solid(mat.fabric, pw, ph, pd, meshX, py, meshZ, { ry: yaw });
+      solid(upholstery, pw, ph, pd, meshX, py, meshZ, { ry: yaw });
     }
   };
   const shelf = (x, z, w = 1.6, h = 2.5) => {
@@ -152,7 +154,17 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   sofa(-7.2, 1.6, 2.65, Math.PI / 2);
   shelf(-15.0, 2.0, 1.35, 2.6); shelf(-6.3, -3.4, 1.25, 2.4);
 
-  // Give the west foyer a lived-in study nook and a clear side route from spawn.
+  // Give the west foyer a bold living-room cluster visible from the entry.
+  box(mat.rug, 6.3, .035, 7.1, -9.65, .041, 11.15, { ignoreRay: true });
+  sofa(-8.45, 12.0, 3.65, 0, mat.studyFabric);
+  for (const x of [-9.35, -7.55]) {
+    box(mat.red, .48, .20, .22, x, 1.03, 11.39, { ignoreRay: true });
+  }
+  table(-8.45, 9.55, 2.55, 1.18, .46);
+  table(-12.0, 12.0, .72, .72, .48, mat.trim);
+
+  // A compact workstation and bookcase fill the rear corner without blocking
+  // the route between the spawn and the central rooms.
   shelf(-14.2, 12.9, 1.45, 2.8);
   table(-11.6, 9.1, 3.0, .95, .76);
   box(mat.darkMetal, 1.0, .08, .58, -11.6, .82, 9.1, { ignoreRay: true });
@@ -189,6 +201,7 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   combatCover(0, 8.2, 2.0, .62);
   combatCover(-7.1, 7.5, 1.7, .58, Math.PI / 2);
   combatCover(-13.25, 14.0, 1.65, .56);
+  combatCover(-12.8, 6.8, 2.0, .68);
   combatCover(-4.15, -4.4, 1.75, .62);
   combatCover(4.15, -4.4, 1.75, .62);
   combatCover(0, -9.3, 2.1, .64);
