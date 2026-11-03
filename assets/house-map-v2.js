@@ -152,6 +152,18 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   sofa(-7.2, 1.6, 2.65, Math.PI / 2);
   shelf(-15.0, 2.0, 1.35, 2.6); shelf(-6.3, -3.4, 1.25, 2.4);
 
+  // Give the west foyer a lived-in study nook and a clear side route from spawn.
+  shelf(-14.2, 12.9, 1.45, 2.8);
+  table(-11.6, 9.1, 3.0, .95, .76);
+  box(mat.darkMetal, 1.0, .08, .58, -11.6, .82, 9.1, { ignoreRay: true });
+  box(mat.red, .54, .035, .32, -11.6, .875, 9.1, { ignoreRay: true });
+  for (const x of [-12.65, -10.55]) {
+    solid(mat.wood, .55, .44, .55, x, .22, 7.95, { cast: true });
+    solid(mat.fabric, .62, .12, .62, x, .50, 7.95, { cast: true });
+  }
+  sofa(-8.8, 8.8, 2.4, Math.PI / 2);
+  table(-8.0, 13.3, 1.15, .72, .58, mat.trim);
+
   // Entrance hall and small landmarks help identify direction while testing.
   table(-3.5, 12.0, 2.5, .62, .68);
   box(mat.red, .46, .42, .46, -3.5, .95, 12.0, { ignoreRay: true });
@@ -175,6 +187,8 @@ export function createHouseArenaV2({ THREE, addRoomBox, addRoomPlane, addRoomLig
   combatCover(-13.1, -7.0, 1.55, .54, Math.PI / 2);
   combatCover(7.0, -11.0, 1.65, .56);
   combatCover(0, 8.2, 2.0, .62);
+  combatCover(-7.1, 7.5, 1.7, .58, Math.PI / 2);
+  combatCover(-13.25, 14.0, 1.65, .56);
   combatCover(-4.15, -4.4, 1.75, .62);
   combatCover(4.15, -4.4, 1.75, .62);
   combatCover(0, -9.3, 2.1, .64);

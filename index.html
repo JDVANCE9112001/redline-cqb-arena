@@ -106,9 +106,6 @@ body.playing #crosshair{opacity:1}
 #hitmarker i:nth-child(3){left:0}#hitmarker i:nth-child(4){right:0}
 #hitmarker.hit{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(45deg)}
 #hitmarker.kill i{background:var(--red);box-shadow:0 0 9px var(--red)}
-#kill-confirm{position:absolute;left:50%;top:calc(50% + 31px);transform:translate(-50%,5px);opacity:0;color:#f4fbff;font-size:8px;font-weight:700;letter-spacing:.24em;text-shadow:0 1px 8px rgba(0,0,0,.8);transition:opacity .12s,transform .12s;white-space:nowrap}
-#kill-confirm.show{opacity:1;transform:translate(-50%,0)}
-#kill-confirm.headshot{color:#8ef0ff;text-shadow:0 0 12px rgba(101,232,255,.8),0 1px 5px rgba(0,0,0,.8)}
 #threat-arrow{position:absolute;left:calc(50% + var(--threat-x,0px));top:calc(50% + var(--threat-y,-72px));transform:translate(-50%,-50%) rotate(var(--threat-angle,0deg));opacity:0;color:#ffb36b;font-size:17px;line-height:1;text-shadow:0 0 10px rgba(255,106,61,.85),0 1px 4px #071525;pointer-events:none;transition:opacity .12s,color .12s}
 #threat-arrow.visible{opacity:.92}
 #threat-arrow.danger{color:#ff3b59;animation:threatPulse .32s ease-in-out infinite alternate}
@@ -431,7 +428,6 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <i class="ch-ring"></i><i class="ch-dot"></i>
   </div>
   <div id="hitmarker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-  <div id="kill-confirm" aria-hidden="true">TARGET SHATTERED</div>
   <div id="threat-arrow" aria-hidden="true">▲</div>
 
   <div class="elapsed-clock" aria-label="实际流逝时间">
@@ -3926,7 +3922,6 @@ function damageEnemy(enemy, hitPoint, normal = null, impact = null) {
 
 function defeatEnemy(enemy, hitPoint, normal = null, impact = null) {
   if (!enemy || !enemy.alive) return false;
-  const headshot = !!(enemy.elite && (impact?.headshot || (hitPoint && hitPoint.y >= enemy.group.position.y + 1.76 * enemy.group.scale.y)));
   // Capture the loadout before the group/weapon visuals are removed. A future
   // weapon-drop system can consume this snapshot without touching body shards.
   enemy.deathDropSpec = enemy.loadout ? { ...enemy.loadout } : null;
@@ -3944,7 +3939,6 @@ function defeatEnemy(enemy, hitPoint, normal = null, impact = null) {
   if (enemy.elite) {
     eliteKills++;
   }
-  showKillConfirm(enemy.elite ? (headshot ? 'ELITE HEADSHOT' : 'ELITE DOWN') : 'TARGET SHATTERED', headshot);
   setWeaponHud();
   sound.killFeedback();
   for (const other of activeEnemies) {
@@ -4009,8 +4003,7 @@ const ui = {
   start: $('#start'), pause: $('#pause'), end: $('#end'), loading: $('#loading'),
   enemyCount: $('#enemy-count'), pips: $('#pips'), runTime: $('#run-time'), elapsedTime: $('#elapsed-time'),
   flowFill: $('#flow-fill'), flowLabel: $('#flow-label'), telemetry: $('#telemetry'),
-  crosshair: $('#crosshair'), hitmarker: $('#hitmarker'), killConfirm: $('#kill-confirm'),
-  threatArrow: $('#threat-arrow'), damage: $('#damage-flash'),
+  crosshair: $('#crosshair'), hitmarker: $('#hitmarker'), threatArrow: $('#threat-arrow'), damage: $('#damage-flash'),
   toast: $('#toast'), audioBtn: $('#audio-btn'), audioLabel: $('#audio-label'),
   weaponReadout: $('#weapon-readout'), weaponTopLabel: $('#weapon-top-label'),
   weaponState: $('#weapon-state'), weaponHint: $('#weapon-hint'),
@@ -5387,18 +5380,6 @@ function toast(message, ms = 1800) {
   ui.toast.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => ui.toast.classList.remove('show'), ms);
-}
-
-let killConfirmTimer = 0;
-function showKillConfirm(label, headshot = false) {
-  if (!ui.killConfirm) return;
-  ui.killConfirm.textContent = label;
-  ui.killConfirm.classList.toggle('headshot', headshot);
-  ui.killConfirm.classList.remove('show');
-  void ui.killConfirm.offsetWidth;
-  ui.killConfirm.classList.add('show');
-  clearTimeout(killConfirmTimer);
-  killConfirmTimer = setTimeout(() => ui.killConfirm.classList.remove('show'), 620);
 }
 
 function updateEnemyHud() {
