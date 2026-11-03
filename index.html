@@ -2058,11 +2058,11 @@ const bulletTracerGeo = new THREE.CylinderGeometry(.006, .022, .92, 6, 1, true);
 bulletTracerGeo.rotateX(Math.PI / 2);
 bulletTracerGeo.translate(0, 0, .31);
 const playerTracerMat = new THREE.MeshBasicMaterial({ color: 0xff102e, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-const enemyTracerMat = new THREE.MeshBasicMaterial({ color: 0xff5335, transparent: true, opacity: .9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+const enemyTracerMat = new THREE.MeshBasicMaterial({ color: 0xff3b20, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
 const playerTracerAuraMat = new THREE.MeshBasicMaterial({ color: 0xff001d, transparent: true, opacity: .42, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-const enemyTracerAuraMat = new THREE.MeshBasicMaterial({ color: 0xff321c, transparent: true, opacity: .3, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+const enemyTracerAuraMat = new THREE.MeshBasicMaterial({ color: 0xff2414, transparent: true, opacity: .58, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
 const playerBulletGlowMat = glowSpriteMaterial(0xff1738, 1);
-const enemyBulletGlowMat = glowSpriteMaterial(0xff562e, .9);
+const enemyBulletGlowMat = glowSpriteMaterial(0xff4724, 1.25);
 
 function createBulletVisual(tracerMat, glowMat, scale = 1, auraMat = null) {
   const group = new THREE.Group();
@@ -3365,6 +3365,7 @@ class Enemy {
     this.gunMuzzle.getWorldPosition(start);
     if (this.loadout.kind === 'pistol') sound.m9Shot(.48);
     else if (this.loadout.kind === 'mac10') sound.mac10Shot(.45);
+    else if (this.loadout.kind === 'shotgun') sound.shotgunShot(.48);
     else sound.enemyShot();
     addMuzzleFlash(start, 0xffb08a);
     const target = playerPos.clone();
@@ -3391,7 +3392,7 @@ class Enemy {
     }
     for (const shotDir of dirs) {
       if (enemyProjectiles.length >= 96) removeProjectile(enemyProjectiles[0]);
-      const bullet = createBulletVisual(enemyTracerMat, enemyBulletGlowMat, this.elite ? .92 : .82, enemyTracerAuraMat);
+      const bullet = createBulletVisual(enemyTracerMat, enemyBulletGlowMat, this.elite ? 1.24 : 1.12, enemyTracerAuraMat);
       bullet.core.userData.projectile = true;
       bullet.group.position.copy(start);
       bullet.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), shotDir);
@@ -5931,12 +5932,13 @@ const sound = {
     o.connect(g); g.connect(this.master);
     o.start(now); o.stop(now + duration + .01);
   },
-  shotgunShot() {
+  shotgunShot(gain = .92) {
     if (!this.active()) return;
-    const recorded = this.playSample('xm1014', .92, 1.0);
-    this.noiseBurst(680, recorded ? .09 : .17, .21, 'lowpass');
-    this.noiseBurst(2600, recorded ? .035 : .06, .05, 'highpass');
-    this.tone(110, 38, .25, 'triangle', recorded ? .035 : .06);
+    const level = gain / .92;
+    const recorded = this.playSample('xm1014', gain, 1.0);
+    this.noiseBurst(680, (recorded ? .09 : .17) * level, .21, 'lowpass');
+    this.noiseBurst(2600, (recorded ? .035 : .06) * level, .05, 'highpass');
+    this.tone(110, 38, .25, 'triangle', (recorded ? .035 : .06) * level);
   },
   pistolShot() {
     if (!this.active()) return;
