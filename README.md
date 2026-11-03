@@ -13,8 +13,9 @@ Map and gameplay integration contract: [MAP_GAMEPLAY_CONTRACT.md](MAP_GAMEPLAY_C
 House map handoff: [MAP_HANDOFF.md](MAP_HANDOFF.md).
 Final collaboration and merge workflow: [COLLABORATION_AGREEMENT.md](COLLABORATION_AGREEMENT.md).
 
-Controls: WASD to move, mouse to aim, left click to fire, Q to throw your current
-weapon, E to pick up a weapon, Escape to pause, R to restart, and M to mute.
+Controls: WASD to move, mouse to aim, tap to fire the revolver and hold left click
+to auto-fire the MAC-10 or rifle. Q throws your current weapon, E picks up a weapon,
+Escape pauses, R restarts, and M mutes.
 
 The Pistol_2, AssaultRifle2_2, and modified Shotgun_ShortStock models come from
 Quaternius's Ultimate Gun Pack (CC0 1.0). The enemy face image was supplied by the game's owner.

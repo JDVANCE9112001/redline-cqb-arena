@@ -476,7 +476,7 @@ body.screen-shake #game{animation:roomShake .28s cubic-bezier(.36,.07,.19,.97)}
     <div class="kicker">TIME BENDS AROUND YOU</div>
     <h1><span class="red">RED</span><span class="shift">SHIFT</span></h1>
     <div class="intro-jp">ミ ラ ク シ ス</div>
-    <p class="intro-copy">在更大的战斗地图中迎击 8 波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，射击、装填、投掷和碎块都遵循时间流速</b>。初始左轮只有 6 发，不能换弹；普通敌人一枪击碎，精英身体两枪、爆头一枪。精英使用步枪，后续波次敌人会携带冲锋枪、步枪或散弹枪。武器只能靠击杀拾取维持，Q 可投掷当前武器，E 拾取，掉落 30 秒后消失。</p>
+    <p class="intro-copy">在更大的战斗地图中迎击 8 波红色玻璃敌人。<b>静止时时间慢放 30 倍；只有移动会恢复原速，射击、装填、投掷和碎块都遵循时间流速</b>。初始左轮只有 6 发，不能换弹；左轮单击射击，冲锋枪和步枪按住左键连发。普通敌人一枪击碎，精英身体两枪、爆头一枪。精英使用步枪，后续波次敌人会携带冲锋枪、步枪或散弹枪。武器只能靠击杀拾取维持，Q 可投掷当前武器，E 拾取，掉落 30 秒后消失。</p>
     <div class="intro-actions">
       <button class="enter-btn" id="enter-btn" type="button"><span>进入模拟</span><span>ENTER SIMULATION</span><span class="arrow">↗</span></button>
       <div class="enter-note"><b>点击画面锁定鼠标</b>CLICK ANYWHERE TO ENGAGE</div>
@@ -654,13 +654,14 @@ const SHOTGUN_PELLETS = 4;
 let eliteKills = 0;
 let currentWeapon = 'revolver';
 const WEAPON_DEFS = {
-  revolver: { label: '左轮', maxAmmo: 6, interval: .42, role: '单发 · 不可换弹', spreadBase: .08, spreadStep: 2, spreadMax: 9, recoil: [.014, .020], modelKey: 'revolver' },
-  mac10: { label: 'MAC-10', maxAmmo: 20, interval: .095, role: '高速连射 · 后坐较强', spreadBase: .45, spreadStep: 1.85, spreadMax: 8.5, recoil: [.006, .011], modelKey: 'mac10' },
-  rifle: { label: '步枪', maxAmmo: 15, interval: .21, role: '精准连射 · 射速较慢', spreadBase: .025, spreadStep: .48, spreadMax: 2.8, recoil: [.004, .008], modelKey: 'rifle' },
+  revolver: { label: '左轮', maxAmmo: 6, interval: .24, role: '单发 · 不可换弹', spreadBase: .08, spreadStep: 2, spreadMax: 9, recoil: [.014, .020], modelKey: 'revolver' },
+  mac10: { label: 'MAC-10', maxAmmo: 20, interval: .085, role: '高速连射 · 后坐较强', spreadBase: .45, spreadStep: 1.85, spreadMax: 8.5, recoil: [.006, .011], modelKey: 'mac10' },
+  rifle: { label: '步枪', maxAmmo: 15, interval: .17, role: '自动连射 · 精度较高', spreadBase: .025, spreadStep: .48, spreadMax: 2.8, recoil: [.004, .008], modelKey: 'rifle' },
   shotgun: { label: '散弹枪', maxAmmo: 6, interval: .65, reloadTime: .65, role: '4 弹丸 · 逐发自动装填', pellets: 4, spread: 4.6, modelKey: 'shotgun' }
 };
 let equippedWeapon = { kind: 'revolver', ammo: 6, maxAmmo: 6 };
 let weaponDrops = [];
+let fireHeld = false;
 let shotQueued = false;
 let lastShotRealAt = -Infinity;
 let shotgunReloadUntil = -Infinity;
@@ -5432,7 +5433,7 @@ function setWeaponHud(mode = 'armed') {
     return;
   }
   ui.weaponTopLabel.textContent = ammo > 0
-    ? (currentWeapon === 'shotgun' ? '4 PELLETS' : 'SINGLE SHOT')
+    ? (currentWeapon === 'shotgun' ? '4 PELLETS' : currentWeapon === 'mac10' || currentWeapon === 'rifle' ? 'FULL AUTO' : 'SINGLE SHOT')
     : 'EMPTY';
   ui.weaponState.textContent = `${def.label} · ${ammo} / ${equippedWeapon.maxAmmo}`;
   ui.weaponHint.textContent = ammo > 0
@@ -6617,9 +6618,9 @@ function shoot() {
     setWeaponHud();
     return;
   }
-  // Buffer a quick tap until the weapon's simulation-time cadence is ready.
+  // Buffer a quick tap until the weapon's real-time cadence is ready.
   // This prevents a short click inside the cooldown window from disappearing.
-  if (runElapsed - lastShotSim < def.interval) { shotQueued = true; return; }
+  if (performance.now() - lastShotRealAt < def.interval * 1000) { shotQueued = true; return; }
   if (runElapsed - lastShotSim > .45) shotStreak = 0;
   camera.updateMatrixWorld(true);
   scene.updateMatrixWorld(true);
@@ -6652,7 +6653,8 @@ function shoot() {
   shots++;
   lastShotRealAt = performance.now();
   lastShotSim = runElapsed;
-  sound.pistolShot();
+  if (currentWeapon === 'rifle') sound.enemyShot();
+  else sound.pistolShot();
   alertEnemies(camera.position);
   weapons.recoil = 1;
   weapons.slideKick = 1;
@@ -7421,8 +7423,10 @@ document.addEventListener('mousemove', e => {
 
 document.addEventListener('mousedown', e => {
   if (gameState !== 'playing' || !isLocked) return;
-  if (e.button === 0) shoot();
+  if (e.button === 0) { fireHeld = true; shoot(); }
 });
+document.addEventListener('mouseup', e => { if (e.button === 0) fireHeld = false; });
+document.addEventListener('blur', () => { fireHeld = false; });
 document.addEventListener('contextmenu', e => {
   if (isLocked) e.preventDefault();
 });
@@ -7497,6 +7501,7 @@ ui.audioBtn.addEventListener('click', e => {
 
 document.addEventListener('pointerlockchange', () => {
   isLocked = document.pointerLockElement === canvas;
+  if (!isLocked) fireHeld = false;
   if (isLocked) {
     if (gameState === 'menu' || gameState === 'paused') enterSimulation();
   } else if (gameState === 'playing') {
@@ -7675,7 +7680,8 @@ function animate() {
     updatePlayer(dt);
     updateWeaponDrops();
     updateShotgunReload();
-    if (shotQueued && isLocked) shoot();
+    const autoFire = fireHeld && (currentWeapon === 'mac10' || currentWeapon === 'rifle');
+    if ((autoFire || shotQueued) && isLocked) shoot();
     if (campaign.phase === 'WAVE_BREAK') {
       const previousSecond = Math.ceil(waveCountdown);
       waveCountdown = Math.max(0, waveCountdown - dt);
@@ -7833,7 +7839,11 @@ window.__REDSHIFT__ = {
   get timeFlow() { return timeFlow; },
   get elapsed() { return runElapsed; },
   get recoil() { return { pitch: recoilPitch, yaw: recoilYaw, hold: recoilHold, viewPitch: camera.rotation.x }; },
-  get spread() { return { deg: +playerSpreadDeg.toFixed(3), streak: shotStreak, lastShotSim: +lastShotSim.toFixed(3), cooldown: Math.max(0, WEAPON_DEFS[currentWeapon].interval - (runElapsed - lastShotSim)) }; },
+  get spread() {
+    const def = WEAPON_DEFS[currentWeapon];
+    const elapsed = currentWeapon === 'shotgun' ? runElapsed - lastShotSim : (performance.now() - lastShotRealAt) / 1000;
+    return { deg: +playerSpreadDeg.toFixed(3), streak: shotStreak, lastShotSim: +lastShotSim.toFixed(3), cooldown: Math.max(0, def.interval - elapsed) };
+  },
   get shotHistory() { return shotHistory.slice(); },
   get renderStats() { return { programs: renderer.info.programs?.length || 0, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }; },
   get colliderStats() { return { total: colliders.length, missingTop: colliders.filter(c => c.top === undefined).length, high: colliders.filter(c => c.top >= 1.5).length }; },
