@@ -9,7 +9,8 @@ enemy, pick up its weapon, or throw your current weapon with Q. Drops disappear
 after 30 seconds. The shotgun has six shells, fires eight pellets, and cycles one
 shell at a time automatically.
 Some enemies carry a fast, inaccurate M9 sidearm with a 15-round magazine. It
-fires short bursts, uses the supplied Beretta M9 recording, and can be picked up.
+fires short bursts, uses the earlier compact pistol model and supplied Beretta M9
+recording, and can be picked up.
 On death, enemies break into directional, physics-driven glass fragments.
 
 Map and gameplay integration contract: [MAP_GAMEPLAY_CONTRACT.md](MAP_GAMEPLAY_CONTRACT.md).

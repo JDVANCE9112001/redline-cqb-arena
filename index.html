@@ -1980,7 +1980,6 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Elite face texture unavailable.', error);
   }
   try {
-    if (!assets.pistolObject) {
     const gltf = await loader.loadAsync('assets/models/pistol_parts.glb');
     gltf.scene.updateMatrixWorld(true);
     gltf.scene.traverse(o => {
@@ -1988,9 +1987,8 @@ async function loadGameAssets() {
       if (o.name.startsWith('slide_')) assets.pistolSlide.push(o.geometry);
       else assets.pistolFrame.push(o.geometry);
     });
-    }
   } catch (error) {
-    console.warn('[RED SHIFT] pistol GLB unavailable; using procedural fallback.', error);
+    console.warn('[RED SHIFT] early compact pistol unavailable; using procedural fallback.', error);
   }
   return assets;
 }
@@ -2634,6 +2632,46 @@ function buildM1014EnemyRig(parent) {
   return { gun, muzzle };
 }
 
+function buildEarlySmallPistolModel() {
+  const model = new THREE.Group();
+  for (const geometry of GAME_ASSETS.pistolFrame) {
+    model.add(new THREE.Mesh(geometry, enemyAssetGunMat));
+  }
+  if (GAME_ASSETS.pistolSlide.length) {
+    const slide = new THREE.Group();
+    for (const geometry of GAME_ASSETS.pistolSlide) {
+      slide.add(new THREE.Mesh(geometry, enemyAssetGunMat));
+    }
+    slide.position.y = -.04;
+    model.add(slide);
+  }
+  if (!GAME_ASSETS.pistolFrame.length && GAME_ASSETS.enemyGeos.enemy_gun) {
+    const fallback = new THREE.Mesh(GAME_ASSETS.enemyGeos.enemy_gun, enemyAssetGunMat);
+    fallback.scale.setScalar(1.2);
+    model.add(fallback);
+  }
+  if (!model.children.length) {
+    const slide = new THREE.Mesh(enemyGunSlideGeo, enemyGunMat);
+    slide.position.set(0, .02, .065);
+    const barrel = new THREE.Mesh(enemyGunBarrelGeo, enemyGunMat);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, .02, .145);
+    const grip = new THREE.Mesh(enemyGunGripGeo, enemyGunMat);
+    grip.position.set(0, -.033, .012);
+    grip.rotation.x = -.28;
+    const guard = new THREE.Mesh(enemyGunGuardGeo, enemyGunMat);
+    guard.position.set(0, -.02, .052);
+    model.add(slide, barrel, grip, guard);
+  }
+  model.traverse(obj => {
+    if (!obj.isMesh) return;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.frustumCulled = false;
+  });
+  return model;
+}
+
 class Enemy {
   constructor(x, z, index, scale = 1, elite = false) {
     this.index = index;
@@ -2778,12 +2816,12 @@ class Enemy {
     } else {
       this.gun = new THREE.Group();
       this.gun.position.set(0, -.055, .025);
-      const source = this.loadout.kind === 'pistol' ? GAME_ASSETS.pistolObject
+      const source = this.loadout.kind === 'pistol' ? buildEarlySmallPistolModel()
         : this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
         : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
           : this.loadout.kind === 'rifle' ? GAME_ASSETS.rifleObject
             : GAME_ASSETS.shotgunObject;
-      const visual = centeredWeaponModel(source, this.loadout.kind === 'shotgun' ? .64 : .53, -Math.PI / 2);
+      const visual = centeredWeaponModel(source, this.loadout.kind === 'shotgun' ? .64 : this.loadout.kind === 'pistol' ? .40 : .53, -Math.PI / 2);
       if (visual) {
         visual.position.set(0, .015, .08);
         this.gun.add(visual);
@@ -2876,11 +2914,11 @@ class Enemy {
       const gunMat = enemyAssetGunMat;
       const gun = new THREE.Group();
       gun.position.set(0, -.015, .03);
-      const weaponSource = this.loadout.kind === 'pistol' ? GAME_ASSETS.pistolObject
+      const weaponSource = this.loadout.kind === 'pistol' ? buildEarlySmallPistolModel()
         : this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
         : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
           : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
-      const weaponVisual = centeredWeaponModel(weaponSource, .53, -Math.PI / 2);
+      const weaponVisual = centeredWeaponModel(weaponSource, this.loadout.kind === 'pistol' ? .40 : .53, -Math.PI / 2);
       if (weaponVisual) {
         weaponVisual.position.set(0, .015, .07);
         gun.add(weaponVisual);
@@ -2905,7 +2943,7 @@ class Enemy {
     const oldGun = this.gun;
     const glow = this.handGlow;
     if (oldGun?.parent) oldGun.parent.remove(oldGun);
-    const eliteWeapon = this.loadout.kind === 'pistol' ? GAME_ASSETS.pistolObject
+    const eliteWeapon = this.loadout.kind === 'pistol' ? buildEarlySmallPistolModel()
       : this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
       : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
         : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
@@ -3865,7 +3903,7 @@ function glassBurstAt(point, impactNormal, enemyRoot, impact = null) {
 }
 
 function weaponModelSource(kind) {
-  return kind === 'pistol' ? GAME_ASSETS.pistolObject
+  return kind === 'pistol' ? buildEarlySmallPistolModel()
     : kind === 'revolver' ? GAME_ASSETS.revolverObject
     : kind === 'mac10' ? GAME_ASSETS.mac10Object
       : kind === 'rifle' ? GAME_ASSETS.rifleObject
@@ -3880,7 +3918,7 @@ function spawnWeaponDrop(spec, x, z, { expiresIn = 30000, replace = false } = {}
   const root = new THREE.Group();
   root.position.set(spot.x, y, spot.z);
   root.rotation.y = Math.random() * Math.PI * 2;
-  const visual = centeredWeaponModel(weaponModelSource(spec.kind), spec.kind === 'shotgun' ? .68 : .56, Math.PI / 2);
+  const visual = centeredWeaponModel(weaponModelSource(spec.kind), spec.kind === 'shotgun' ? .68 : spec.kind === 'pistol' ? .42 : .56, Math.PI / 2);
   if (visual) {
     visual.rotation.x = Math.PI / 2;
     visual.position.y = .02;
@@ -5489,10 +5527,10 @@ function updateWeaponVisibility() {
 function applyViewWeaponModel(kind) {
   if (!weapons?.modelSlot) return;
   while (weapons.modelSlot.children.length) weapons.modelSlot.remove(weapons.modelSlot.children[0]);
-  const source = kind === 'revolver' ? GAME_ASSETS.revolverObject
+  const source = kind === 'pistol' ? buildEarlySmallPistolModel()
+    : kind === 'revolver' ? GAME_ASSETS.revolverObject
     : kind === 'mac10' ? GAME_ASSETS.mac10Object
-      : kind === 'rifle' ? GAME_ASSETS.rifleObject
-        : kind === 'pistol' ? GAME_ASSETS.pistolObject : null;
+      : kind === 'rifle' ? GAME_ASSETS.rifleObject : null;
   const profile = kind === 'rifle'
     ? { length: 1.02, scale: .50, pos: [.31, -.205, -.56], rot: [-.025, .08, .008] }
     : kind === 'mac10'
