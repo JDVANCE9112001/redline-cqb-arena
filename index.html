@@ -663,14 +663,14 @@ let hitboxThreatState = 'SAFE';
 const composerState = { composer: null, bloom: null };
 let weapons = null;
 let shotgunView = null;
-const SHOTGUN_PELLETS = 4;
+const SHOTGUN_PELLETS = 8;
 let eliteKills = 0;
 let currentWeapon = 'revolver';
 const WEAPON_DEFS = {
   revolver: { label: '左轮', maxAmmo: 6, interval: .24, role: '单发 · 不可换弹', spreadBase: .08, spreadStep: 2, spreadMax: 9, recoil: [.014, .020], modelKey: 'revolver' },
   mac10: { label: 'MAC-10', maxAmmo: 20, interval: .085, role: '高速连射 · 后坐较强', spreadBase: .45, spreadStep: 1.85, spreadMax: 8.5, recoil: [.006, .011], modelKey: 'mac10' },
   rifle: { label: '步枪', maxAmmo: 15, interval: .17, role: '自动连射 · 精度较高', spreadBase: .025, spreadStep: .48, spreadMax: 2.8, recoil: [.004, .008], modelKey: 'rifle' },
-  shotgun: { label: '散弹枪', maxAmmo: 6, interval: .65, reloadTime: .65, role: '4 弹丸 · 逐发自动装填', pellets: 4, spread: 4.6, modelKey: 'shotgun' }
+  shotgun: { label: '散弹枪', maxAmmo: 6, interval: .65, reloadTime: .65, role: '8 弹丸 · 逐发自动装填', pellets: 8, spread: 4.6, modelKey: 'shotgun' }
 };
 let equippedWeapon = { kind: 'revolver', ammo: 6, maxAmmo: 6 };
 let weaponDrops = [];
@@ -4118,6 +4118,7 @@ const TIME_DILATED = 1 / 30;
 let gameState = 'menu';
 let timeFlow = 0;
 let yaw = 0, pitch = 0;
+let cameraRoll = 0;
 let recoilPitch = 0;
 let recoilYaw = 0;
 let recoilHold = 0;
@@ -5534,7 +5535,7 @@ function setWeaponHud(mode = 'armed') {
     return;
   }
   ui.weaponTopLabel.textContent = ammo > 0
-    ? (currentWeapon === 'shotgun' ? '4 PELLETS' : currentWeapon === 'mac10' || currentWeapon === 'rifle' ? 'FULL AUTO' : 'SINGLE SHOT')
+    ? (currentWeapon === 'shotgun' ? `${SHOTGUN_PELLETS} PELLETS` : currentWeapon === 'mac10' || currentWeapon === 'rifle' ? 'FULL AUTO' : 'SINGLE SHOT')
     : 'EMPTY';
   ui.weaponState.textContent = `${def.label} · ${ammo} / ${equippedWeapon.maxAmmo}`;
   ui.weaponHint.textContent = ammo > 0
@@ -5680,7 +5681,7 @@ function restartWorld() {
   player.velocity.set(0, 0, 0);
   player.bob = 0;
   player.bobTime = 0;
-  yaw = 0; pitch = 0; recoilPitch = 0; recoilYaw = 0; recoilHold = 0; killShake = 0; killShakeSeed = 0;
+  yaw = 0; pitch = 0; cameraRoll = 0; recoilPitch = 0; recoilYaw = 0; recoilHold = 0; killShake = 0; killShakeSeed = 0;
   camera.position.copy(player.position);
   camera.rotation.set(0, 0, 0);
   timeFlow = TIME_DILATED;
@@ -7754,7 +7755,11 @@ function updatePlayer(dt) {
   const shakeNow = performance.now();
   const shakePitch = Math.sin(shakeNow * .052 + killShakeSeed) * killShake;
   const shakeYaw = Math.cos(shakeNow * .043 + killShakeSeed * 1.37) * killShake * .65;
-  camera.rotation.set(pitch + recoilPitch + shakePitch, yaw + recoilYaw + shakeYaw, -player.velocity.x * .003);
+  // Keep the slight strafe lean in camera space and damp it. Using world-X
+  // velocity directly made forward movement at some yaws cause a visible twitch.
+  const strafeVelocity = player.velocity.x * Math.cos(yaw) - player.velocity.z * Math.sin(yaw);
+  cameraRoll = damp(cameraRoll, -strafeVelocity * .0017, 7, dt);
+  camera.rotation.set(pitch + recoilPitch + shakePitch, yaw + recoilYaw + shakeYaw, cameraRoll);
   if (gameState === 'playing') runElapsed += dt * timeFlow;
   if (gameState === 'playing' && runElapsed - elapsedPaint > .005) {
     elapsedPaint = runElapsed;
