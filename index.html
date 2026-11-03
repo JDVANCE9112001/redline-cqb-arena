@@ -668,6 +668,7 @@ let eliteKills = 0;
 let currentWeapon = 'revolver';
 const WEAPON_DEFS = {
   revolver: { label: '左轮', maxAmmo: 6, interval: .24, role: '单发 · 不可换弹', spreadBase: .08, spreadStep: 2, spreadMax: 9, recoil: [.014, .020], modelKey: 'revolver' },
+  pistol: { label: 'M9 手枪', maxAmmo: 15, interval: .12, role: '高速连射 · 高散布', spreadBase: 1.35, spreadStep: .82, spreadMax: 6.5, recoil: [.003, .006], modelKey: 'pistol' },
   mac10: { label: 'MAC-10', maxAmmo: 20, interval: .085, role: '高速连射 · 后坐较强', spreadBase: .45, spreadStep: 1.85, spreadMax: 8.5, recoil: [.006, .011], modelKey: 'mac10' },
   rifle: { label: '步枪', maxAmmo: 15, interval: .17, role: '自动连射 · 精度较高', spreadBase: .025, spreadStep: .48, spreadMax: 2.8, recoil: [.004, .008], modelKey: 'rifle' },
   shotgun: { label: '散弹枪', maxAmmo: 6, interval: .65, reloadTime: .65, role: '8 弹丸 · 逐发自动装填', pellets: 8, spread: 4.6, modelKey: 'shotgun' }
@@ -691,10 +692,10 @@ function enemyWeaponForWave(wave, elite, index) {
     return 'rifle';
   }
   const roll = (index * 7 + Math.floor(Math.random() * 7)) % 7;
-  if (wave <= 2) return 'revolver';
-  if (wave <= 4) return roll === 0 ? 'shotgun' : roll < 3 ? 'mac10' : 'revolver';
-  if (wave <= 6) return roll < 2 ? 'shotgun' : roll < 4 ? 'rifle' : 'mac10';
-  return roll < 3 ? 'shotgun' : roll < 5 ? 'rifle' : 'mac10';
+  if (wave <= 2) return roll < 2 ? 'pistol' : 'revolver';
+  if (wave <= 4) return roll === 0 ? 'shotgun' : roll < 3 ? 'mac10' : roll === 3 ? 'pistol' : 'revolver';
+  if (wave <= 6) return roll < 2 ? 'shotgun' : roll < 4 ? 'rifle' : roll === 6 ? 'pistol' : 'mac10';
+  return roll < 3 ? 'shotgun' : roll < 5 ? 'rifle' : roll === 6 ? 'pistol' : 'mac10';
 }
 
 /* --------------------------------------------------------------------------
@@ -2649,13 +2650,15 @@ class Enemy {
     this.hitParts = [];
     const rawAttrs = enemyAttrs();
     const isHouseV2 = ROOMS.current?.name === 'HOUSE_V2';
-    const weaponTuning = this.loadout.kind === 'revolver'
-      ? { fireGap: rawAttrs.fireGap * 1.6, accuracy: rawAttrs.accuracy * .88 }
-      : this.loadout.kind === 'mac10'
-        ? { fireGap: rawAttrs.fireGap * 1.25, accuracy: rawAttrs.accuracy * .9 }
-        : this.loadout.kind === 'shotgun'
-          ? { fireGap: rawAttrs.fireGap * 1.5, accuracy: rawAttrs.accuracy * .82 }
-          : { fireGap: rawAttrs.fireGap * 1.05, accuracy: rawAttrs.accuracy * .96 };
+    const weaponTuning = this.loadout.kind === 'pistol'
+      ? { fireGap: rawAttrs.fireGap * .48, accuracy: rawAttrs.accuracy * .48, mag: WEAPON_DEFS.pistol.maxAmmo }
+      : this.loadout.kind === 'revolver'
+        ? { fireGap: rawAttrs.fireGap * 1.6, accuracy: rawAttrs.accuracy * .88 }
+        : this.loadout.kind === 'mac10'
+          ? { fireGap: rawAttrs.fireGap * 1.25, accuracy: rawAttrs.accuracy * .9 }
+          : this.loadout.kind === 'shotgun'
+            ? { fireGap: rawAttrs.fireGap * 1.5, accuracy: rawAttrs.accuracy * .82 }
+            : { fireGap: rawAttrs.fireGap * 1.05, accuracy: rawAttrs.accuracy * .96 };
     const tunedAttrs = { ...rawAttrs, ...weaponTuning };
     const baseAttrs = isHouseV2 ? {
       ...tunedAttrs,
@@ -2692,9 +2695,9 @@ class Enemy {
     this.duckTimer = 0;
     this.reloading = false;
     this.reloadTimer = 0;
-    // Enemies have no reload cycle in the handoff rules; their own weapon
-    // cadence is controlled by fireGapTimer instead.
-    this.mag = Infinity;
+    // Legacy enemy guns use continuous reserves; the new M9 has a real
+    // 15-round magazine and enters the existing cover reload cycle.
+    this.mag = this.loadout.kind === 'pistol' ? WEAPON_DEFS.pistol.maxAmmo : Infinity;
     this.burstLeft = 0;
     this.burstTimer = 0;
     this.fireGapTimer = rand(.35, .8) + (campaign.level <= 4 ? .25 : 0);
@@ -2775,7 +2778,8 @@ class Enemy {
     } else {
       this.gun = new THREE.Group();
       this.gun.position.set(0, -.055, .025);
-      const source = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
+      const source = this.loadout.kind === 'pistol' ? GAME_ASSETS.pistolObject
+        : this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
         : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
           : this.loadout.kind === 'rifle' ? GAME_ASSETS.rifleObject
             : GAME_ASSETS.shotgunObject;
@@ -2872,7 +2876,8 @@ class Enemy {
       const gunMat = enemyAssetGunMat;
       const gun = new THREE.Group();
       gun.position.set(0, -.015, .03);
-      const weaponSource = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
+      const weaponSource = this.loadout.kind === 'pistol' ? GAME_ASSETS.pistolObject
+        : this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
         : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
           : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
       const weaponVisual = centeredWeaponModel(weaponSource, .53, -Math.PI / 2);
@@ -2900,7 +2905,8 @@ class Enemy {
     const oldGun = this.gun;
     const glow = this.handGlow;
     if (oldGun?.parent) oldGun.parent.remove(oldGun);
-    const eliteWeapon = this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
+    const eliteWeapon = this.loadout.kind === 'pistol' ? GAME_ASSETS.pistolObject
+      : this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
       : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
         : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
     let gun;
@@ -2914,7 +2920,7 @@ class Enemy {
       gun.position.set(.12, .31, .31);
       if (eliteWeapon) {
         const model = eliteWeapon.clone(true);
-        model.scale.setScalar(this.loadout.kind === 'shotgun' ? .31 : this.loadout.kind === 'revolver' ? .38 : .22);
+        model.scale.setScalar(this.loadout.kind === 'shotgun' ? .31 : this.loadout.kind === 'revolver' || this.loadout.kind === 'pistol' ? .38 : .22);
         model.rotation.y = -Math.PI / 2 + .27;
         model.position.set(0, -.015, .025);
         gun.add(model);
@@ -3161,7 +3167,7 @@ class Enemy {
   }
 
   startBurst() {
-    this.burstLeft = 1;
+    this.burstLeft = this.loadout.kind === 'pistol' ? 3 : 1;
     this.burstTimer = 0;
     this.ducking = false;
   }
@@ -3170,7 +3176,7 @@ class Enemy {
     this.burstLeft = 0;
     this.ducking = true;
     this.duckTimer = Math.max(.18, this.attrs.hide * rand(.82, 1.18));
-    this.fireGapTimer = (this.loadout.kind === 'shotgun' ? 1 : .5) * rand(.9, 1.1);
+    this.fireGapTimer = (this.loadout.kind === 'pistol' ? .24 : this.loadout.kind === 'shotgun' ? 1 : .5) * rand(.9, 1.1);
   }
 
   startReload() {
@@ -3193,7 +3199,8 @@ class Enemy {
       this.ducking = true;
       if (this.reloadTimer <= 0) {
         this.reloading = false;
-        this.mag = this.attrs.mag;
+        this.mag = this.loadout.kind === 'pistol' ? WEAPON_DEFS.pistol.maxAmmo : this.attrs.mag;
+        if (this.loadout.kind === 'pistol') this.loadout.ammo = this.mag;
         this.ducking = false;
         this.fireGapTimer = Math.max(this.fireGapTimer, .2);
       }
@@ -3253,8 +3260,9 @@ class Enemy {
         if (this.mag > 0 && this.canSeePlayer(playerPos)) {
           this.firePistol(playerPos);
           this.mag--;
+          if (this.loadout.kind === 'pistol') this.loadout.ammo = this.mag;
           this.burstLeft--;
-          this.burstTimer = 0;
+          this.burstTimer = this.loadout.kind === 'pistol' && this.burstLeft > 0 ? .12 : 0;
           if (this.burstLeft <= 0) this.finishBurst();
         } else {
           this.finishBurst();
@@ -3352,13 +3360,14 @@ class Enemy {
     this.group.updateMatrixWorld(true);
     const start = new THREE.Vector3();
     this.gunMuzzle.getWorldPosition(start);
-    if (this.loadout.kind === 'mac10') sound.mac10Shot(.45);
+    if (this.loadout.kind === 'pistol') sound.m9Shot(.48);
+    else if (this.loadout.kind === 'mac10') sound.mac10Shot(.45);
     else sound.enemyShot();
     addMuzzleFlash(start, 0xffb08a);
     const target = playerPos.clone();
     target.y = playerPos.y - .04;
     const dir = target.sub(start).normalize();
-    const spread = .060 - .042 * this.attrs.accuracy;
+    const spread = (.060 - .042 * this.attrs.accuracy) * (this.loadout.kind === 'pistol' ? 2.2 : 1);
     dir.x += rand(-spread, spread);
     dir.y += rand(-spread * .55, spread * .55);
     dir.z += rand(-spread, spread);
@@ -3856,7 +3865,8 @@ function glassBurstAt(point, impactNormal, enemyRoot, impact = null) {
 }
 
 function weaponModelSource(kind) {
-  return kind === 'revolver' ? GAME_ASSETS.revolverObject
+  return kind === 'pistol' ? GAME_ASSETS.pistolObject
+    : kind === 'revolver' ? GAME_ASSETS.revolverObject
     : kind === 'mac10' ? GAME_ASSETS.mac10Object
       : kind === 'rifle' ? GAME_ASSETS.rifleObject
         : GAME_ASSETS.shotgunObject;
@@ -5487,7 +5497,9 @@ function applyViewWeaponModel(kind) {
     ? { length: 1.02, scale: .50, pos: [.31, -.205, -.56], rot: [-.025, .08, .008] }
     : kind === 'mac10'
       ? { length: .72, scale: .60, pos: [.26, -.205, -.44], rot: [-.02, .08, .008] }
-      : { length: .84, scale: .58, pos: [.26, -.205, -.48], rot: [-.035, .16, .012] };
+      : kind === 'pistol'
+        ? { length: .70, scale: .58, pos: [.26, -.205, -.46], rot: [-.035, .16, .012] }
+        : { length: .84, scale: .58, pos: [.26, -.205, -.48], rot: [-.035, .16, .012] };
   const length = profile.length;
   weapons.gun.scale.setScalar(profile.scale);
   weapons.gun.position.set(...profile.pos);
@@ -5535,7 +5547,7 @@ function setWeaponHud(mode = 'armed') {
     return;
   }
   ui.weaponTopLabel.textContent = ammo > 0
-    ? (currentWeapon === 'shotgun' ? `${SHOTGUN_PELLETS} PELLETS` : currentWeapon === 'mac10' || currentWeapon === 'rifle' ? 'FULL AUTO' : 'SINGLE SHOT')
+    ? (currentWeapon === 'shotgun' ? `${SHOTGUN_PELLETS} PELLETS` : currentWeapon === 'pistol' || currentWeapon === 'mac10' || currentWeapon === 'rifle' ? 'FULL AUTO' : 'SINGLE SHOT')
     : 'EMPTY';
   ui.weaponState.textContent = `${def.label} · ${ammo} / ${equippedWeapon.maxAmmo}`;
   ui.weaponHint.textContent = ammo > 0
@@ -5792,7 +5804,7 @@ const sound = {
   ctx: null, master: null, muted: false, hum: null,
   bgm: new Audio('audio/guardians-bgm.mp3'),
   pickupAudio: new Audio('audio/weapon-pickup.mp3'),
-  samples: { gunshot: null, glass: null, enemyShot: null, hit: null, kill: null, commonKill: null }, samplesLoading: false,
+  samples: { gunshot: null, m9: null, glass: null, enemyShot: null, hit: null, kill: null, commonKill: null }, samplesLoading: false,
   init() {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -5831,8 +5843,8 @@ const sound = {
         const bytes = await response.arrayBuffer();
         return new Promise((resolve, reject) => this.ctx.decodeAudioData(bytes, resolve, reject));
       };
-      const names = ['gunshot', 'mac10', 'glass', 'enemyShot', 'hit', 'kill', 'commonKill'];
-      const paths = ['audio/player-shot.mp3', 'audio/mac10-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3', 'audio/glass-death-4s.wav'];
+      const names = ['gunshot', 'mac10', 'm9', 'glass', 'enemyShot', 'hit', 'kill', 'commonKill'];
+      const paths = ['audio/player-shot.mp3', 'audio/mac10-shot.mp3', 'audio/beretta-m9-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3', 'audio/glass-death-4s.wav'];
       const results = await Promise.allSettled(paths.map(load));
       results.forEach((result, i) => {
         if (result.status === 'fulfilled') this.samples[names[i]] = result.value;
@@ -5936,6 +5948,12 @@ const sound = {
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
     if (this.playSample('mac10', gain, 1.0)) return;
     this.enemyShot(.40);
+  },
+  m9Shot(gain = .72) {
+    if (!this.active()) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    if (this.playSample('m9', gain, 1.0)) return;
+    this.pistolShot();
   },
   enemyShot(gain = .45) {
     if (!this.active()) return;
@@ -6793,7 +6811,8 @@ function shoot(fromHeldAutoFire = false) {
   shots++;
   lastShotRealAt = performance.now();
   lastShotSim = runElapsed;
-  if (currentWeapon === 'rifle') sound.enemyShot(.40);
+  if (currentWeapon === 'pistol') sound.m9Shot(.72);
+  else if (currentWeapon === 'rifle') sound.enemyShot(.40);
   else if (currentWeapon === 'mac10') sound.mac10Shot(.82);
   else sound.pistolShot();
   alertEnemies(camera.position);
@@ -7851,7 +7870,7 @@ function animate() {
     updatePlayer(dt);
     updateWeaponDrops();
     updateShotgunReload();
-    const autoFire = fireHeld && (currentWeapon === 'mac10' || currentWeapon === 'rifle');
+    const autoFire = fireHeld && (currentWeapon === 'pistol' || currentWeapon === 'mac10' || currentWeapon === 'rifle');
     if ((autoFire || shotQueued) && isLocked) shoot(autoFire);
     if (campaign.phase === 'WAVE_BREAK') {
       const previousSecond = Math.ceil(waveCountdown);
