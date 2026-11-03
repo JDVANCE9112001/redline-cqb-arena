@@ -1840,7 +1840,8 @@ function buildWeapon() {
     gun.position.set(.29, -.23, -.70);
     gun.rotation.set(0, 0, .012);
     gun.traverse(o => { if (o.isMesh) o.visible = false; });
-    const asset = GAME_ASSETS.pistolObject;
+    // Keep the shared source pristine for enemy, pickup, and alternate-viewmodel clones.
+    const asset = GAME_ASSETS.pistolObject.clone(true);
     asset.scale.setScalar(.35);
     asset.rotation.y = Math.PI / 2;
     asset.position.set(0, -.13, .245);
@@ -1980,15 +1981,17 @@ async function loadGameAssets() {
     console.warn('[RED SHIFT] Elite face texture unavailable.', error);
   }
   try {
-    const gltf = await loader.loadAsync('assets/models/pistol_parts.glb');
-    gltf.scene.updateMatrixWorld(true);
-    gltf.scene.traverse(o => {
-      if (!o.isMesh) return;
-      if (o.name.startsWith('slide_')) assets.pistolSlide.push(o.geometry);
-      else assets.pistolFrame.push(o.geometry);
-    });
+    if (!assets.pistolObject) {
+      const gltf = await loader.loadAsync('assets/models/pistol_parts.glb');
+      gltf.scene.updateMatrixWorld(true);
+      gltf.scene.traverse(o => {
+        if (!o.isMesh) return;
+        if (o.name.startsWith('slide_')) assets.pistolSlide.push(o.geometry);
+        else assets.pistolFrame.push(o.geometry);
+      });
+    }
   } catch (error) {
-    console.warn('[RED SHIFT] early compact pistol unavailable; using procedural fallback.', error);
+    console.warn('[RED SHIFT] pistol GLB unavailable; using procedural fallback.', error);
   }
   return assets;
 }
@@ -2632,46 +2635,6 @@ function buildM1014EnemyRig(parent) {
   return { gun, muzzle };
 }
 
-function buildEarlySmallPistolModel() {
-  const model = new THREE.Group();
-  for (const geometry of GAME_ASSETS.pistolFrame) {
-    model.add(new THREE.Mesh(geometry, enemyAssetGunMat));
-  }
-  if (GAME_ASSETS.pistolSlide.length) {
-    const slide = new THREE.Group();
-    for (const geometry of GAME_ASSETS.pistolSlide) {
-      slide.add(new THREE.Mesh(geometry, enemyAssetGunMat));
-    }
-    slide.position.y = -.04;
-    model.add(slide);
-  }
-  if (!GAME_ASSETS.pistolFrame.length && GAME_ASSETS.enemyGeos.enemy_gun) {
-    const fallback = new THREE.Mesh(GAME_ASSETS.enemyGeos.enemy_gun, enemyAssetGunMat);
-    fallback.scale.setScalar(1.2);
-    model.add(fallback);
-  }
-  if (!model.children.length) {
-    const slide = new THREE.Mesh(enemyGunSlideGeo, enemyGunMat);
-    slide.position.set(0, .02, .065);
-    const barrel = new THREE.Mesh(enemyGunBarrelGeo, enemyGunMat);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, .02, .145);
-    const grip = new THREE.Mesh(enemyGunGripGeo, enemyGunMat);
-    grip.position.set(0, -.033, .012);
-    grip.rotation.x = -.28;
-    const guard = new THREE.Mesh(enemyGunGuardGeo, enemyGunMat);
-    guard.position.set(0, -.02, .052);
-    model.add(slide, barrel, grip, guard);
-  }
-  model.traverse(obj => {
-    if (!obj.isMesh) return;
-    obj.castShadow = false;
-    obj.receiveShadow = false;
-    obj.frustumCulled = false;
-  });
-  return model;
-}
-
 class Enemy {
   constructor(x, z, index, scale = 1, elite = false) {
     this.index = index;
@@ -2816,13 +2779,14 @@ class Enemy {
     } else {
       this.gun = new THREE.Group();
       this.gun.position.set(0, -.055, .025);
-      const source = this.loadout.kind === 'pistol' ? buildEarlySmallPistolModel()
+      const source = this.loadout.kind === 'pistol' ? GAME_ASSETS.pistolObject
         : this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
         : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
           : this.loadout.kind === 'rifle' ? GAME_ASSETS.rifleObject
             : GAME_ASSETS.shotgunObject;
       const visual = centeredWeaponModel(source, this.loadout.kind === 'shotgun' ? .64 : this.loadout.kind === 'pistol' ? .40 : .53, -Math.PI / 2);
       if (visual) {
+        if (this.loadout.kind === 'pistol') visual.traverse(obj => { if (obj.isMesh) obj.material = enemyAssetGunMat; });
         visual.position.set(0, .015, .08);
         this.gun.add(visual);
       } else {
@@ -2839,7 +2803,7 @@ class Enemy {
         this.gun.add(pistolSlide, pistolBarrel, pistolGrip, pistolGuard);
       }
       this.gunMuzzle = new THREE.Object3D();
-      this.gunMuzzle.position.set(0, .02, this.loadout.kind === 'rifle' || this.loadout.kind === 'shotgun' ? .47 : .34);
+      this.gunMuzzle.position.set(0, .02, this.loadout.kind === 'rifle' || this.loadout.kind === 'shotgun' ? .47 : this.loadout.kind === 'pistol' ? .24 : .34);
       this.gun.add(this.gunMuzzle);
       this.arms[1].hand.add(this.gun);
     }
@@ -2914,12 +2878,13 @@ class Enemy {
       const gunMat = enemyAssetGunMat;
       const gun = new THREE.Group();
       gun.position.set(0, -.015, .03);
-      const weaponSource = this.loadout.kind === 'pistol' ? buildEarlySmallPistolModel()
+      const weaponSource = this.loadout.kind === 'pistol' ? GAME_ASSETS.pistolObject
         : this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
         : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
           : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
       const weaponVisual = centeredWeaponModel(weaponSource, this.loadout.kind === 'pistol' ? .40 : .53, -Math.PI / 2);
       if (weaponVisual) {
+        if (this.loadout.kind === 'pistol') weaponVisual.traverse(obj => { if (obj.isMesh) obj.material = enemyAssetGunMat; });
         weaponVisual.position.set(0, .015, .07);
         gun.add(weaponVisual);
       } else if (geos.enemy_gun) {
@@ -2931,7 +2896,7 @@ class Enemy {
       this.arms[1].hand.add(gun);
       this.gun = gun;
       this.gunMuzzle = new THREE.Object3D();
-      this.gunMuzzle.position.set(0, .02, weaponVisual ? .36 : .178);
+      this.gunMuzzle.position.set(0, .02, this.loadout.kind === 'pistol' ? .23 : weaponVisual ? .36 : .178);
       gun.add(this.gunMuzzle);
     }
     this.handGlow = addGlow(this.gunMuzzle, 0, 0, 0, .4, .4, 0xff2f50, .0, handGlowPool.take());
@@ -2943,7 +2908,7 @@ class Enemy {
     const oldGun = this.gun;
     const glow = this.handGlow;
     if (oldGun?.parent) oldGun.parent.remove(oldGun);
-    const eliteWeapon = this.loadout.kind === 'pistol' ? buildEarlySmallPistolModel()
+    const eliteWeapon = this.loadout.kind === 'pistol' ? GAME_ASSETS.pistolObject
       : this.loadout.kind === 'revolver' ? GAME_ASSETS.revolverObject
       : this.loadout.kind === 'mac10' ? GAME_ASSETS.mac10Object
         : this.loadout.kind === 'shotgun' ? GAME_ASSETS.shotgunObject : GAME_ASSETS.rifleObject;
@@ -3903,7 +3868,7 @@ function glassBurstAt(point, impactNormal, enemyRoot, impact = null) {
 }
 
 function weaponModelSource(kind) {
-  return kind === 'pistol' ? buildEarlySmallPistolModel()
+  return kind === 'pistol' ? GAME_ASSETS.pistolObject
     : kind === 'revolver' ? GAME_ASSETS.revolverObject
     : kind === 'mac10' ? GAME_ASSETS.mac10Object
       : kind === 'rifle' ? GAME_ASSETS.rifleObject
@@ -3920,6 +3885,7 @@ function spawnWeaponDrop(spec, x, z, { expiresIn = 30000, replace = false } = {}
   root.rotation.y = Math.random() * Math.PI * 2;
   const visual = centeredWeaponModel(weaponModelSource(spec.kind), spec.kind === 'shotgun' ? .68 : spec.kind === 'pistol' ? .42 : .56, Math.PI / 2);
   if (visual) {
+    if (spec.kind === 'pistol') visual.traverse(obj => { if (obj.isMesh) obj.material = enemyAssetGunMat; });
     visual.rotation.x = Math.PI / 2;
     visual.position.y = .02;
     root.add(visual);
@@ -5527,7 +5493,7 @@ function updateWeaponVisibility() {
 function applyViewWeaponModel(kind) {
   if (!weapons?.modelSlot) return;
   while (weapons.modelSlot.children.length) weapons.modelSlot.remove(weapons.modelSlot.children[0]);
-  const source = kind === 'pistol' ? buildEarlySmallPistolModel()
+  const source = kind === 'pistol' ? GAME_ASSETS.pistolObject
     : kind === 'revolver' ? GAME_ASSETS.revolverObject
     : kind === 'mac10' ? GAME_ASSETS.mac10Object
       : kind === 'rifle' ? GAME_ASSETS.rifleObject : null;
@@ -5536,7 +5502,7 @@ function applyViewWeaponModel(kind) {
     : kind === 'mac10'
       ? { length: .72, scale: .60, pos: [.26, -.205, -.44], rot: [-.02, .08, .008] }
       : kind === 'pistol'
-        ? { length: .70, scale: .58, pos: [.26, -.205, -.46], rot: [-.035, .16, .012] }
+        ? { length: .70, scale: .58, pos: [.29, -.23, -.63], rot: [0, 0, .012] }
         : { length: .84, scale: .58, pos: [.26, -.205, -.48], rot: [-.035, .16, .012] };
   const length = profile.length;
   weapons.gun.scale.setScalar(profile.scale);
@@ -5544,11 +5510,39 @@ function applyViewWeaponModel(kind) {
   weapons.gun.rotation.set(...profile.rot);
   weapons.base.copy(weapons.gun.position);
   weapons.baseRot.copy(weapons.gun.rotation);
-  const model = centeredWeaponModel(source, length);
+  let model;
+  if (kind === 'pistol' && source) {
+    model = source.clone(true);
+    model.scale.setScalar(.35);
+    model.rotation.y = Math.PI / 2;
+    model.position.set(0, -.13, .245);
+    const shade = { Black: 0x0e1419, LightMetal: 0x869097, Metal: 0x39454c, Wood: 0x533b32 };
+    model.traverse(obj => {
+      if (!obj.isMesh) return;
+      const materialFor = original => {
+        const name = original?.name || 'Metal';
+        return new THREE.MeshStandardMaterial({
+          color: shade[name] || shade.Metal,
+          metalness: name === 'Wood' ? .03 : .65,
+          roughness: name === 'Wood' ? .72 : .33,
+          flatShading: true
+        });
+      };
+      obj.material = Array.isArray(obj.material) ? obj.material.map(materialFor) : materialFor(obj.material);
+      obj.frustumCulled = false;
+    });
+  } else {
+    model = centeredWeaponModel(source, length);
+  }
   if (model) weapons.modelSlot.add(model);
   weapons.slideGroup.visible = false;
-  weapons.muzzleAnchor.position.set(0, .035, -length * .48);
-  weapons.flashGroup.position.copy(weapons.muzzleAnchor.position);
+  if (kind === 'pistol') {
+    weapons.muzzleAnchor.position.set(0, .06, -.272);
+    weapons.flashGroup.position.set(0, .06, -.283);
+  } else {
+    weapons.muzzleAnchor.position.set(0, .035, -length * .48);
+    weapons.flashGroup.position.copy(weapons.muzzleAnchor.position);
+  }
   weapons.flashGroup.visible = false;
   if (kind === 'shotgun' && shotgunView) shotgunView.rig.visible = true;
 }
