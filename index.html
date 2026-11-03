@@ -667,8 +667,8 @@ const SHOTGUN_PELLETS = 8;
 let eliteKills = 0;
 let currentWeapon = 'revolver';
 const WEAPON_DEFS = {
-  revolver: { label: '左轮', maxAmmo: 6, interval: .24, role: '单发 · 不可换弹', spreadBase: .08, spreadStep: 2, spreadMax: 9, recoil: [.014, .020], modelKey: 'revolver' },
-  pistol: { label: 'M9 手枪', maxAmmo: 15, interval: .12, role: '高速连射 · 高散布', spreadBase: 1.35, spreadStep: .82, spreadMax: 6.5, recoil: [.003, .006], modelKey: 'pistol' },
+  revolver: { label: '左轮', maxAmmo: 6, interval: .24, range: Infinity, role: '单发 · 不可换弹', spreadBase: .08, spreadStep: 2, spreadMax: 9, recoil: [.014, .020], modelKey: 'revolver' },
+  pistol: { label: 'M9 手枪', maxAmmo: 15, interval: .12, range: 24, role: '高速连射 · 高散布', spreadBase: 1.35, spreadStep: .82, spreadMax: 6.5, recoil: [.010, .017], modelKey: 'pistol' },
   mac10: { label: 'MAC-10', maxAmmo: 20, interval: .085, role: '高速连射 · 后坐较强', spreadBase: .45, spreadStep: 1.85, spreadMax: 8.5, recoil: [.006, .011], modelKey: 'mac10' },
   rifle: { label: '步枪', maxAmmo: 15, interval: .17, role: '自动连射 · 精度较高', spreadBase: .025, spreadStep: .48, spreadMax: 2.8, recoil: [.004, .008], modelKey: 'rifle' },
   shotgun: { label: '散弹枪', maxAmmo: 6, interval: .65, reloadTime: .65, role: '8 弹丸 · 逐发自动装填', pellets: 8, spread: 4.6, modelKey: 'shotgun' }
@@ -5836,7 +5836,7 @@ const sound = {
   ctx: null, master: null, muted: false, hum: null,
   bgm: new Audio('audio/guardians-bgm.mp3'),
   pickupAudio: new Audio('audio/weapon-pickup.mp3'),
-  samples: { gunshot: null, m9: null, glass: null, enemyShot: null, hit: null, kill: null, commonKill: null }, samplesLoading: false,
+  samples: { gunshot: null, m9: null, xm1014: null, glass: null, enemyShot: null, hit: null, kill: null, commonKill: null }, samplesLoading: false,
   init() {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -5875,8 +5875,8 @@ const sound = {
         const bytes = await response.arrayBuffer();
         return new Promise((resolve, reject) => this.ctx.decodeAudioData(bytes, resolve, reject));
       };
-      const names = ['gunshot', 'mac10', 'm9', 'glass', 'enemyShot', 'hit', 'kill', 'commonKill'];
-      const paths = ['audio/player-shot.mp3', 'audio/mac10-shot.mp3', 'audio/beretta-m9-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3', 'audio/glass-death-4s.wav'];
+      const names = ['gunshot', 'mac10', 'm9', 'xm1014', 'glass', 'enemyShot', 'hit', 'kill', 'commonKill'];
+      const paths = ['audio/player-shot.mp3', 'audio/mac10-shot.mp3', 'audio/beretta-m9-shot.mp3', 'audio/xm1014-shot.mp3', 'audio/objective-break.mp3', 'audio/enemy-shot.mp3', 'audio/enemy-hit.mp3', 'audio/enemy-kill.mp3', 'audio/glass-death-4s.wav'];
       const results = await Promise.allSettled(paths.map(load));
       results.forEach((result, i) => {
         if (result.status === 'fulfilled') this.samples[names[i]] = result.value;
@@ -5933,10 +5933,10 @@ const sound = {
   },
   shotgunShot() {
     if (!this.active()) return;
-    this.playSample('gunshot', .78, .72);
-    this.noiseBurst(680, .17, .21, 'lowpass');
-    this.noiseBurst(2600, .06, .05, 'highpass');
-    this.tone(110, 38, .25, 'triangle', .06);
+    const recorded = this.playSample('xm1014', .92, 1.0);
+    this.noiseBurst(680, recorded ? .09 : .17, .21, 'lowpass');
+    this.noiseBurst(2600, recorded ? .035 : .06, .05, 'highpass');
+    this.tone(110, 38, .25, 'triangle', recorded ? .035 : .06);
   },
   pistolShot() {
     if (!this.active()) return;
@@ -6814,7 +6814,7 @@ function shoot(fromHeldAutoFire = false) {
   if (runElapsed - lastShotSim > .45) shotStreak = 0;
   camera.updateMatrixWorld(true);
   scene.updateMatrixWorld(true);
-  raycaster.far = 110;
+  raycaster.far = def.range ?? 110;
   raycaster.setFromCamera(center2D, camera);
   const enemyMeshes = [];
   activeEnemies.forEach(e => { if (e.alive) enemyMeshes.push(...e.hitParts); });
@@ -6832,7 +6832,7 @@ function shoot(fromHeldAutoFire = false) {
 
   const muzzleWorld = new THREE.Vector3();
   weapons.muzzleAnchor.getWorldPosition(muzzleWorld);
-  const aimPoint = aimHit ? aimHit.point.clone() : raycaster.ray.at(80, new THREE.Vector3());
+  const aimPoint = aimHit ? aimHit.point.clone() : raycaster.ray.at(Number.isFinite(def.range) ? Math.min(80, def.range) : 80, new THREE.Vector3());
   const dir = aimPoint.sub(muzzleWorld).normalize();
   const spreadDeg = shotStreak === 0 ? def.spreadBase : Math.min(def.spreadMax, def.spreadBase + def.spreadStep * shotStreak);
   playerSpreadDeg = spreadDeg;
@@ -6982,6 +6982,7 @@ function spawnTestEnemyShot(from, to) {
 
 function spawnPlayerBullet(start, dir, size = 1) {
   if (!start || !dir || dir.lengthSq() < .000001) return false;
+  const maxRange = WEAPON_DEFS[equippedWeapon.kind]?.range ?? 160;
   const visual = createBulletVisual(playerTracerMat, playerBulletGlowMat, size, playerTracerAuraMat);
   if (!visual?.group) return false;
   visual.group.position.copy(start).addScaledVector(dir, .04);
@@ -6993,8 +6994,9 @@ function spawnPlayerBullet(start, dir, size = 1) {
     group: visual.group,
     dir: dir.clone(),
     speed: 72,
-    life: 2.6,
-    realLife: 3.5,
+    life: Number.isFinite(maxRange) ? 2.6 : 60,
+    realLife: Number.isFinite(maxRange) ? 3.5 : 60,
+    maxRange,
     travelled: 0
   });
   return true;
@@ -7045,9 +7047,12 @@ function updatePlayerBullets(dt, flow) {
     if (simDt <= 0) continue;
     const step = b.speed * simDt;
     if (step > 0) {
+      const remainingRange = b.maxRange - b.travelled;
+      if (remainingRange <= 0) { removePlayerBullet(i); continue; }
+      const travelStep = Math.min(step, remainingRange);
       bulletSweepRay.set(b.group.position, b.dir);
       bulletSweepRay.near = 0;
-      bulletSweepRay.far = step;
+      bulletSweepRay.far = travelStep;
       const hitsList = rayTargets.length ? bulletSweepRay.intersectObjects(rayTargets, true) : [];
       let hit = null;
       for (const h of hitsList) {
@@ -7057,14 +7062,14 @@ function updatePlayerBullets(dt, flow) {
         if (obj.userData.projectile && !liveProjectileMeshes.has(obj)) continue;
         if (obj.userData.ignoreRay) continue;
         if (obj.material && obj.material.transparent && obj.material.opacity < .55) continue;
-        if (h.distance <= step) hit = h;
+        if (h.distance <= travelStep) hit = h;
         break;
       }
-      const midX = b.group.position.x + b.dir.x * step * .5;
-      const midZ = b.group.position.z + b.dir.z * step * .5;
-      for (const collider of nearbyColliders(midX, midZ, step * .55 + .12)) {
+      const midX = b.group.position.x + b.dir.x * travelStep * .5;
+      const midZ = b.group.position.z + b.dir.z * travelStep * .5;
+      for (const collider of nearbyColliders(midX, midZ, travelStep * .55 + .12)) {
         if (!Number.isFinite(collider.top)) continue;
-        const distance = segmentAabbDistance(b.group.position, b.dir, step, collider);
+        const distance = segmentAabbDistance(b.group.position, b.dir, travelStep, collider);
         if (distance < (hit?.distance ?? Infinity)) {
           hit = {
             distance,
@@ -7076,7 +7081,7 @@ function updatePlayerBullets(dt, flow) {
       }
       if (b.dir.y < -1e-5) {
         const floorDistance = (.025 - b.group.position.y) / b.dir.y;
-        if (floorDistance >= 0 && floorDistance <= step && floorDistance < (hit?.distance ?? Infinity)) {
+        if (floorDistance >= 0 && floorDistance <= travelStep && floorDistance < (hit?.distance ?? Infinity)) {
           hit = { distance: floorDistance, point: b.group.position.clone().addScaledVector(b.dir, floorDistance), face: null, object: { userData: {} } };
         }
       }
@@ -7115,10 +7120,10 @@ function updatePlayerBullets(dt, flow) {
         removePlayerBullet(i);
         continue;
       }
-      b.group.position.addScaledVector(b.dir, step);
-      b.travelled += step;
+      b.group.position.addScaledVector(b.dir, travelStep);
+      b.travelled += travelStep;
       b.life -= simDt;
-      if (b.travelled > 160 || b.life <= 0) {
+      if (b.travelled >= b.maxRange || b.life <= 0) {
         removePlayerBullet(i);
       }
     }
